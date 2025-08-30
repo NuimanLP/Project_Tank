@@ -36,7 +36,7 @@
 ### Milestone 2.1: ESP32-Odroid Communication
 **เป้าหมาย:** สร้างการสื่อสารที่เสถียรระหว่าง ESP32 และ Odroid
 
-- [] UART protocol design (COBS+CRC16)
+- [ ] UART protocol design (COBS+CRC16)
 - [ ] Binary frame structure และ parsing
 - [ ] Sequence number และ timestamp validation
 - [ ] Packet loss handling และ retry mechanism
