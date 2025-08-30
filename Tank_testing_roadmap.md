@@ -14,17 +14,17 @@
 ### Milestone 1.1: ESP32 Core Functions
 **เป้าหมาย:** ทดสอบการทำงานพื้นฐานของ ESP32 และ peripheral หลัก
 
-- [] ESP32 boot sequence และ UART communication
-- [] Motor driver control (6 motors, direction/speed)
-- [] MPU6050 IMU calibration และ data reading
-- [] Servo control (360° radar + barrel tilt)
+- [ ] ESP32 boot sequence และ UART communication
+- [ ] Motor driver control (6 motors, direction/speed)
+- [ ] MPU6050 IMU calibration และ data reading
+- [ ] Servo control (360° radar + barrel tilt)
 - [ ] Ultrasonic sensor integration และ noise filtering
 
 ### Milestone 1.2: Odroid System Setup
 **เป้าหมาย:** ตั้งค่า Odroid เป็น central brain และทดสอบ I/O
 
-- [] Odroid boot และ system configuration
-- [] USB camera detection และ basic capture
+- [ ] Odroid boot และ system configuration
+- [ ] USB camera detection และ basic capture
 - [ ] USB joystick input reading
 - [ ] UART communication กับ ESP32
 - [ ] USB DAC audio output testing
