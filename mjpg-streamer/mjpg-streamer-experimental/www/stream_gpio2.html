@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MJPG-Streamer with GPIO Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .stream-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .stream-container img {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+        .gpio-control {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f8f8f8;
+            border-radius: 5px;
+        }
+        .gpio-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .gpio-button {
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .gpio-button:hover {
+            transform: scale(1.05);
+        }
+        .gpio-on {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .gpio-off {
+            background-color: #f44336;
+            color: white;
+        }
+        .gpio-status {
+            text-align: center;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        .status-on {
+            color: #4CAF50;
+        }
+        .status-off {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MJPG-Streamer with GPIO Control</h1>
+        
+        <div class="stream-container">
+            <img src="/?action=stream" alt="Video Stream">
+        </div>
+        
+        <div class="gpio-control">
+            <h2>GPIO Control-Pin 26 (GPIO 597)</h2>
+            <div class="gpio-status">
+                Status: <span id="status" class="status-off">Unknown</span>
+            </div>
+            <div class="gpio-buttons">
+                <button class="gpio-button gpio-on" onclick="setGPIO(1)">
+                    Turn ON
+                </button>
+                <button class="gpio-button gpio-off" onclick="setGPIO(0)">
+                    Turn OFF
+                </button>
+            </div>
+            <div class="gpio-status">
+                <small>Last action: <span id="lastTime">Never</span></small>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple GPIO control without expecting JSON response
+        function setGPIO(value) {
+            // Create an image element to make the request (works even without proper response)
+            var img = new Image();
+            img.src = '/?action=gpio&value=' + value + '&t=' + Date.now();
+            
+            // Update UI optimistically
+            updateStatus(value);
+            updateLastTime();
+            
+            // Show feedback
+            console.log('GPIO command sent: ' + value);
+        }
+        
+        // Update status display
+        function updateStatus(value) {
+            const statusEl = document.getElementById('status');
+            if (value == 1) {
+                statusEl.textContent = 'ON';
+                statusEl.className = 'status-on';
+            } else {
+                statusEl.textContent = 'OFF';
+                statusEl.className = 'status-off';
+            }
+        }
+        
+        // Update last action time
+        function updateLastTime() {
+            const now = new Date();
+            document.getElementById('lastTime').textContent = now.toLocaleTimeString();
+        }
+    </script>
+</body>
+</html>

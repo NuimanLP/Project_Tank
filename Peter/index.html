@@ -1,0 +1,182 @@
+<html>
+<head>
+<title>Camera MJPEG Stream & GPIO Control</title>
+<style>
+body {
+    background-color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    flex-direction: column;
+}
+.container {
+    text-align: center;
+}
+h1 {
+    color: white;
+    margin-bottom: 20px;
+}
+img {
+    border: 2px solid #555;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    max-width: 100%;
+    height: auto;
+}
+.info {
+    color: #ccc;
+    margin-top: 20px;
+}
+.status {
+    color: #4CAF50;
+    margin-top: 10px;
+}
+.control-container {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.gpio-button {
+    background-color: #f44336; /* Red color */
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s, box-shadow 0.3s;
+}
+.gpio-button:active {
+    background-color: #d32f2f; /* Darker red on press */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+.gpio-status {
+    color: #ccc;
+    margin-top: 10px;
+    font-size: 14px;
+}
+.gpio-status.on {
+    color: #4CAF50; /* Green */
+}
+.gpio-status.off {
+    color: #f44336; /* Red */
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>Camera MJPEG Stream</h1>
+    <img src="stream.mjpg" width="640" height="480" />
+    <div class="info">
+        <p>Direct stream URL: <a href="/stream.mjpg" style="color: #4CAF50;">/stream.mjpg</a></p>
+        <p class="status">✓ Streaming active</p>
+    </div>
+
+    <div class="control-container">
+        <h2>GPIO Control</h2>
+        <button id="gpioButton" class="gpio-button">Press and Hold to Activate GPIO</button>
+        <div id="gpioStatus" class="gpio-status off">GPIO Status: OFF</div>
+    </div>
+</div>
+
+<script>
+    const gpioButton = document.getElementById('gpioButton');
+    const gpioStatus = document.getElementById('gpioStatus');
+
+    // Function to update the status text and color
+    function updateStatus(state) {
+        if (state === 'on') {
+            gpioStatus.textContent = "GPIO Status: ON";
+            gpioStatus.classList.remove('off');
+            gpioStatus.classList.add('on');
+        } else {
+            gpioStatus.textContent = "GPIO Status: OFF";
+            gpioStatus.classList.remove('on');
+            gpioStatus.classList.add('off');
+        }
+    }
+
+    // Send a request to turn GPIO on when the button is pressed
+    gpioButton.addEventListener('mousedown', () => {
+        fetch('/gpio_on')
+            .then(response => {
+                if (response.ok) {
+                    updateStatus('on');
+                    console.log('GPIO turned ON');
+                } else {
+                    console.error('Failed to turn on GPIO. Server response:', response.status);
+                    updateStatus('off');
+                }
+            })
+            .catch(error => {
+                console.error('Error turning on GPIO:', error);
+                updateStatus('off');
+            });
+    });
+
+    // Send a request to turn GPIO off when the button is released
+    gpioButton.addEventListener('mouseup', () => {
+        fetch('/gpio_off')
+            .then(response => {
+                if (response.ok) {
+                    updateStatus('off');
+                    console.log('GPIO turned OFF');
+                } else {
+                    console.error('Failed to turn off GPIO. Server response:', response.status);
+                    updateStatus('off');
+                }
+            })
+            .catch(error => {
+                console.error('Error turning off GPIO:', error);
+                updateStatus('off');
+            });
+    });
+
+    // Handle touch events for mobile devices
+    gpioButton.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Prevent default browser behavior (e.g., zoom)
+        fetch('/gpio_on')
+            .then(response => {
+                if (response.ok) {
+                    updateStatus('on');
+                    console.log('GPIO turned ON (touch)');
+                } else {
+                    console.error('Failed to turn on GPIO (touch). Server response:', response.status);
+                    updateStatus('off');
+                }
+            })
+            .catch(error => {
+                console.error('Error turning on GPIO (touch):', error);
+                updateStatus('off');
+            });
+    });
+
+    gpioButton.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        fetch('/gpio_off')
+            .then(response => {
+                if (response.ok) {
+                    updateStatus('off');
+                    console.log('GPIO turned OFF (touch)');
+                } else {
+                    console.error('Failed to turn off GPIO (touch). Server response:', response.status);
+                    updateStatus('off');
+                }
+            })
+            .catch(error => {
+                console.error('Error turning off GPIO (touch):', error);
+                updateStatus('off');
+            });
+    });
+
+</script>
+</body>
+</html>

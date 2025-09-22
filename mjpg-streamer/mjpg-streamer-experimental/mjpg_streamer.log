@@ -1,0 +1,48 @@
+nohup: ignoring input
+Starting MJPG-Streamer with GPIO Control...
+GPIO Pin 597 (physical pin 26) will be used for light control
+
+Configuring GPIO 597...
+Testing GPIO (LED should blink once)...
+GPIO test complete
+
+Access the stream with GPIO control at:
+  http://192.168.1.106:8080/stream_gpio.html
+
+Or access the standard interface at:
+  http://192.168.1.106:8080/
+
+Press Ctrl+C to stop
+
+MJPG Streamer Version: git rev: 310b29f4a94c46652b20c4b7b6e5cf24e532af39
+ i: Using V4L2 device.: /dev/video0
+ i: Desired Resolution: 640 x 480
+ i: Frames Per Second.: 30
+ i: Format............: JPEG
+ i: TV-Norm...........: DEFAULT
+ i: Could not obtain the requested pixelformat: MJPG , driver gave us: YUYV
+    ... will try to handle this by checking against supported formats. 
+    ... Falling back to YUV mode (consider using -yuv option). Note that this requires much more CPU power
+UVCIOC_CTRL_ADD - Error at Pan (relative): Inappropriate ioctl for device (25)
+UVCIOC_CTRL_ADD - Error at Tilt (relative): Inappropriate ioctl for device (25)
+UVCIOC_CTRL_ADD - Error at Pan Reset: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_ADD - Error at Tilt Reset: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_ADD - Error at Pan/tilt Reset: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_ADD - Error at Focus (absolute): Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Pan (relative): Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Tilt (relative): Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Pan Reset: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Tilt Reset: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Pan/tilt Reset: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Focus (absolute): Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at LED1 Mode: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at LED1 Frequency: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Disable video processing: Inappropriate ioctl for device (25)
+UVCIOC_CTRL_MAP - Error at Raw bits per pixel: Inappropriate ioctl for device (25)
+ o: www-folder-path......: ./www/
+ o: HTTP TCP port........: 8080
+ o: HTTP Listen Address..: (null)
+ o: username:password....: disabled
+ o: commands.............: enabled
+Terminated
+Cleaning up...

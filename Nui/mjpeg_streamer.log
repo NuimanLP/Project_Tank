@@ -1,0 +1,2 @@
+nohup: ignoring input
+[ WARN:0@1.275] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
