@@ -151,6 +151,18 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content)
             except FileNotFoundError:
                 self.send_error(404, 'File Not Found: %s' % self.path)
+        elif self.path.endswith('.mp3'):
+            try:
+                # This handles the audio file request
+                with open(self.path[1:], 'rb') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'audio/mpeg')
+                self.send_header('Content-Length', len(content))
+                self.end_headers()
+                self.wfile.write(content)
+            except FileNotFoundError:
+                self.send_error(404, 'File Not Found: %s' % self.path)
         elif self.path == '/gpio_on':
             if GPIO_SUPPORT:
                 try:

@@ -166,6 +166,7 @@ img {
         <div id="gpioStatus" class="gpio-status off">GPIO Status: OFF</div>
     </div>
 </div>
+<audio id="fireSound" src="gunshot.mp3" preload="auto"></audio>
 
 <script>
     const gpioStatus = document.getElementById('gpioStatus');
@@ -176,7 +177,8 @@ img {
     const videoStream = document.getElementById('videoStream');
     const cameraLatencyElement = document.getElementById('cameraLatency');
     const keyPressStatus = document.getElementById('keyPressStatus');
-    
+    const fireSound = document.getElementById('fireSound'); // ดึง element เสียงมาเก็บไว้ในตัวแปร
+
     // Use a Set to track which keys are currently pressed
     const pressedKeys = new Set();
     let isFireOn = false;
@@ -250,35 +252,43 @@ img {
                         console.error('Error sending blink command:', error);
                     });
             } else {
-                // Center button sends ON command
-                fetch('/gpio_on')
-                    .then(response => {
-                        if (response.ok) {
-                            updateStatus('on');
-                            console.log('GPIO turned ON');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error sending command:', error);
-                        updateStatus('off');
-                    });
+                // Center button sends ON command and plays sound
+                if (!isFireOn) {
+                    isFireOn = true;
+                    fetch('/laser_on')
+                        .then(response => {
+                            if (response.ok) {
+                                updateStatus('on');
+                                fireSound.currentTime = 0; // ตั้งค่าเสียงกลับไปที่จุดเริ่มต้น
+                                fireSound.play(); // เล่นเสียง
+                                console.log('GPIO turned ON and sound played');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error sending command:', error);
+                            updateStatus('off');
+                        });
+                }
             }
         };
 
         const handleStop = () => {
             if (!isJoystickAction) {
                 // Center button sends OFF command
-                fetch('/gpio_off')
-                    .then(response => {
-                        if (response.ok) {
+                if (isFireOn) {
+                    isFireOn = false;
+                    fetch('/laser_off')
+                        .then(response => {
+                            if (response.ok) {
+                                updateStatus('off');
+                                console.log('GPIO turned OFF');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error sending stop command:', error);
                             updateStatus('off');
-                            console.log('GPIO turned OFF');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error sending stop command:', error);
-                        updateStatus('off');
-                    });
+                        });
+                }
             }
         };
 
@@ -313,7 +323,13 @@ img {
             if (!isFireOn) {
                 e.preventDefault();
                 isFireOn = true;
-                fetch('/gpio_on').then(response => { if (response.ok) updateStatus('on'); });
+                fetch('/laser_on').then(response => {
+                    if (response.ok) {
+                        updateStatus('on');
+                        fireSound.currentTime = 0; // ตั้งค่าเสียงกลับไปที่จุดเริ่มต้น
+                        fireSound.play(); // เล่นเสียง
+                    }
+                });
             }
         } else {
             let blinkCount = 0;
@@ -341,7 +357,7 @@ img {
         if (key === ' ') {
             if (isFireOn) {
                 isFireOn = false;
-                fetch('/gpio_off').then(response => { if (response.ok) updateStatus('off'); });
+                fetch('/laser_off').then(response => { if (response.ok) updateStatus('off'); });
             }
         }
     });
@@ -372,6 +388,9 @@ img {
 
     videoStream.addEventListener('mousedown', (e) => {
         if (e.button === 0) { // Left mouse button
+            // เล่นเสียงเมื่อกดเมาส์
+            fireSound.currentTime = 0; // ตั้งค่าเสียงกลับไปที่จุดเริ่มต้น
+            fireSound.play();
             fetch('/laser_on').catch(error => console.error('Error:', error));
         }
     });
