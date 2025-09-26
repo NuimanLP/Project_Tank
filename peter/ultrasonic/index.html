@@ -1,0 +1,484 @@
+<html>
+<head>
+<title>Camera MJPEG Stream & Tank Control</title>
+<style>
+/* Base Styles */
+html, body {
+    background-color: #222; /* Darker background */
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; 
+}
+
+/* Main Layout Container (Using Flexbox for 3-column layout) */
+.main-layout {
+    display: flex;
+    height: 100vh;
+    padding: 10px;
+    box-sizing: border-box;
+    gap: 15px; /* Space between columns */
+}
+
+/* Common Panel Styling */
+.control-panel, .info-panel {
+    background-color: #333;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    flex-shrink: 0; /* Prevent panels from shrinking */
+    width: 250px; /* Fixed width for side panels */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Center Stream Container */
+.stream-container {
+    flex-grow: 1; /* Takes up all available space */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+}
+
+/* Video Stream Image */
+img {
+    border: 3px solid #00bcd4; /* Accent border color */
+    box-shadow: 0 0 25px rgba(0, 188, 212, 0.5); /* Glowing effect */
+    max-width: 100%;
+    max-height: 100%; /* Fill the center area */
+    width: auto;
+    height: auto;
+    object-fit: contain; 
+    cursor: crosshair; 
+}
+
+/* Information Panel Specific Styles */
+.info h2 {
+    color: #00bcd4;
+    margin-top: 0;
+    border-bottom: 2px solid #555;
+    padding-bottom: 5px;
+    width: 100%;
+    text-align: center;
+}
+.info p {
+    margin: 10px 0;
+    font-size: 0.95em;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+}
+.info .status {
+    color: #4CAF50;
+    font-weight: bold;
+}
+.info span {
+    color: #fff;
+    font-weight: normal;
+}
+
+/* Control Panel Specific Styles (Joystick) */
+.control-panel h2 {
+    color: #FFC107; /* Yellow/Amber for controls */
+    margin-top: 0;
+    border-bottom: 2px solid #555;
+    padding-bottom: 5px;
+    width: 100%;
+    text-align: center;
+}
+
+.joystick-container {
+    display: grid;
+    grid-template-areas:
+        ". up ."
+        "left center right"
+        ". down .";
+    gap: 10px;
+    width: 180px; /* Slightly larger joystick */
+    height: 180px;
+    margin-top: 20px;
+}
+.joystick-button {
+    background-color: #555;
+    color: white;
+    font-size: 28px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.2s, transform 0.1s;
+    user-select: none;
+    box-shadow: 0 3px #444; /* 3D effect */
+}
+.joystick-button:active {
+    background-color: #777;
+    transform: translateY(2px);
+    box-shadow: 0 1px #444;
+}
+#up-button { grid-area: up; }
+#down-button { grid-area: down; }
+#left-button { grid-area: left; }
+#right-button { grid-area: right; }
+#center-button {
+    grid-area: center;
+    background-color: #f44336; /* Red for laser/fire */
+    border-radius: 50%;
+    font-size: 16px;
+    box-shadow: 0 3px #c63700;
+}
+#center-button:active {
+    background-color: #d32f2f;
+    transform: translateY(2px);
+    box-shadow: 0 1px #c63700;
+}
+
+.gpio-status {
+    color: #ccc;
+    margin-top: 20px;
+    font-size: 14px;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+.gpio-status.on {
+    color: #4CAF50;
+    background-color: rgba(76, 175, 80, 0.1);
+}
+.gpio-status.off {
+    color: #f44336;
+    background-color: rgba(244, 67, 54, 0.1);
+}
+
+/* Footer / Header for context */
+.header-title {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #00bcd4;
+    font-size: 1.5em;
+    padding: 5px;
+    z-index: 10;
+}
+</style>
+</head>
+<body>
+<div class="header-title">Raspberry Pi Tank Control Stream</div>
+
+<div class="main-layout">
+    
+    <div class="control-panel">
+        <h2>Movement Control</h2>
+        <div class="joystick-container">
+            <div id="up-button" class="joystick-button">&#9650;</div> 
+            <div id="down-button" class="joystick-button">&#9660;</div>
+            <div id="left-button" class="joystick-button">&#9664;</div>
+            <div id="right-button" class="joystick-button">&#9654;</div>
+            <div id="center-button" class="joystick-button">FIRE</div>
+        </div>
+        <p style="margin-top: 20px; font-size: 0.9em; color: #aaa;">Keyboard: **WASD** for Movement, **Space** for Fire</p>
+        <div id="gpioStatus" class="gpio-status off">Laser Status: OFF</div>
+    </div>
+    
+    <div class="stream-container">
+        <img id="videoStream" src="stream.mjpg" />
+    </div>
+    
+    <div class="info-panel">
+        <h2>Status & Telemetry</h2>
+        <div class="info" style="width: 100%;">
+            <p>Time: <span id="piTime">Loading...</span></p>
+            <p>Latency: <span id="cameraLatency">N/A</span> ms</p>
+            
+            <p>Distance: <span id="ultrasonicDistance">N/A</span> cm</p>
+            <hr style="border-color: #555; width: 100%; margin: 10px 0;">
+            <p>Command: <span id="keyPressStatus" class="status">None</span></p>
+            <hr style="border-color: #555; width: 100%; margin: 10px 0;">
+            <h3>Turret Aim (Mouse)</h3>
+            <p>Aim X: <span id="mouseX">0</span></p>
+            <p>Aim Y: <span id="mouseY">0</span></p>
+        </div>
+    </div>
+</div>
+<audio id="fireSound" src="gunshot.mp3" preload="auto"></audio>
+
+<script>
+    const gpioStatus = document.getElementById('gpioStatus');
+    const joystickButtons = document.querySelectorAll('.joystick-button');
+    const piTimeElement = document.getElementById('piTime');
+    const mouseXElement = document.getElementById('mouseX');
+    const mouseYElement = document.getElementById('mouseY');
+    const videoStream = document.getElementById('videoStream');
+    const cameraLatencyElement = document.getElementById('cameraLatency');
+    const keyPressStatus = document.getElementById('keyPressStatus');
+    const ultrasonicDistanceElement = document.getElementById('ultrasonicDistance'); // NEW ELEMENT
+    const fireSound = document.getElementById('fireSound');
+
+    const pressedKeys = new Set();
+    const movementKeys = new Set(['w', 'a', 's', 'd']); 
+    let isFireOn = false;
+
+    function throttle(func, delay) {
+        let inThrottle;
+        return function() {
+            const args = arguments;
+            const context = this;
+            if (!inThrottle) {
+                func.apply(context, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, delay);
+            }
+        }
+    }
+
+    function updateStatus(state) {
+        if (state === 'on') {
+            gpioStatus.textContent = "Laser Status: ON (FIRE)";
+            gpioStatus.classList.remove('off');
+            gpioStatus.classList.add('on');
+        } else {
+            gpioStatus.textContent = "Laser Status: OFF";
+            gpioStatus.classList.remove('on');
+            gpioStatus.classList.add('off');
+        }
+    }
+
+    function sendMovementCommand(command) {
+        if (!['W', 'A', 'S', 'D', 'X'].includes(command.toUpperCase())) return;
+        
+        fetch(`/tank_command?cmd=${command.toUpperCase()}`)
+            .then(response => {
+                if (response.ok) {
+                    if (command !== 'X') {
+                        keyPressStatus.textContent = command.toUpperCase();
+                    } else if (keyPressStatus.textContent !== 'None') {
+                        keyPressStatus.textContent = 'X (Stop)'; 
+                    }
+                } else {
+                    console.error(`Failed to send tank command: ${command.toUpperCase()}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending tank command:', error);
+            });
+    }
+
+
+    joystickButtons.forEach(button => {
+        let command = 'X'; 
+        let isJoystickAction = false;
+
+        switch (button.id) {
+            case 'up-button':
+                command = 'W';
+                isJoystickAction = true;
+                break;
+            case 'right-button':
+                command = 'D';
+                isJoystickAction = true;
+                break;
+            case 'down-button':
+                command = 'S';
+                isJoystickAction = true;
+                break;
+            case 'left-button':
+                command = 'A';
+                isJoystickAction = true;
+                break;
+            case 'center-button':
+                isJoystickAction = false;
+                break;
+        }
+
+        const handleAction = () => {
+            if (isJoystickAction) {
+                sendMovementCommand(command);
+            } else {
+                if (!isFireOn) {
+                    isFireOn = true;
+                    fetch('/laser_on')
+                        .then(response => {
+                            if (response.ok) {
+                                updateStatus('on');
+                                fireSound.currentTime = 0;
+                                fireSound.play();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error sending laser ON command:', error);
+                            updateStatus('off');
+                        });
+                }
+            }
+        };
+
+        const handleStop = () => {
+            if (isJoystickAction) {
+                sendMovementCommand('X');
+            } else {
+                if (isFireOn) {
+                    isFireOn = false;
+                    fetch('/laser_off')
+                        .then(response => {
+                            if (response.ok) {
+                                updateStatus('off');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error sending laser OFF command:', error);
+                            updateStatus('off');
+                        });
+                }
+            }
+        };
+
+        button.addEventListener('mousedown', handleAction);
+        button.addEventListener('mouseup', handleStop);
+
+        button.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleAction();
+        });
+
+        button.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleStop();
+        });
+        button.addEventListener('touchcancel', (e) => { 
+            e.preventDefault();
+            handleStop();
+        });
+    });
+
+    // Keyboard control for WASD and Spacebar
+    document.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        
+        if (pressedKeys.has(key)) {
+            return;
+        }
+        pressedKeys.add(key);
+        
+        if (key === ' ') {
+            if (!isFireOn) {
+                e.preventDefault();
+                isFireOn = true;
+                fetch('/laser_on').then(response => {
+                    if (response.ok) {
+                        updateStatus('on');
+                        fireSound.currentTime = 0; 
+                        fireSound.play(); 
+                    }
+                });
+            }
+        } 
+        else if (movementKeys.has(key)) {
+            sendMovementCommand(key);
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        
+        pressedKeys.delete(key);
+        
+        if (pressedKeys.size === 0) {
+            keyPressStatus.textContent = 'None';
+        }
+        
+        if (key === ' ') {
+            if (isFireOn) {
+                isFireOn = false;
+                fetch('/laser_off').then(response => { if (response.ok) updateStatus('off'); });
+            }
+        } 
+        else if (movementKeys.has(key)) {
+            
+            // FIX: Check for remaining movement keys and send that command
+            const remainingMovementKeys = Array.from(pressedKeys).filter(k => movementKeys.has(k));
+            
+            if (remainingMovementKeys.length > 0) {
+                const nextCommandKey = remainingMovementKeys[0]; 
+                sendMovementCommand(nextCommandKey);
+
+            } else {
+                 sendMovementCommand('X');
+            }
+        }
+    });
+
+    // Mouse control on the video image (for Pan/Tilt servos)
+    const throttledSendPos = throttle((x, y) => {
+        fetch(`/set_mouse_pos?x=${x}&y=${y}`).catch(error => console.error('Error:', error));
+    }, 50);
+
+    videoStream.addEventListener('mousemove', (e) => {
+        const rect = videoStream.getBoundingClientRect();
+        const videoWidth = rect.width;
+        const videoHeight = rect.height;
+
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const centerX = x - (videoWidth / 2);
+        const centerY = (videoHeight / 2) - y;
+
+        mouseXElement.textContent = centerX.toFixed(0);
+        mouseYElement.textContent = centerY.toFixed(0);
+        throttledSendPos(centerX, centerY);
+    });
+
+    videoStream.addEventListener('mousedown', (e) => {
+        if (e.button === 0) {
+            fireSound.currentTime = 0; 
+            fireSound.play();
+            fetch('/laser_on').catch(error => console.error('Error:', error));
+        }
+    });
+
+    videoStream.addEventListener('mouseup', (e) => {
+        if (e.button === 0) {
+            fetch('/laser_off').catch(error => console.error('Error:', error));
+        }
+    });
+
+    // Time update function
+    function updatePiTime() {
+        fetch('/get_time')
+            .then(response => response.text())
+            .then(time => { piTimeElement.textContent = time; })
+            .catch(error => { piTimeElement.textContent = 'N/A'; });
+    }
+    updatePiTime();
+    setInterval(updatePiTime, 1000);
+    
+    // Function to update camera latency
+    function updateCameraLatency() {
+        fetch('/get_latency')
+            .then(response => response.text())
+            .then(latency => { cameraLatencyElement.textContent = latency; })
+            .catch(error => { cameraLatencyElement.textContent = 'N/A'; });
+    }
+    updateCameraLatency();
+    setInterval(updateCameraLatency, 1000);
+    
+    // NEW: Function to update Ultrasonic Distance
+    function updateUltrasonicDistance() {
+        fetch('/get_distance')
+            .then(response => response.text())
+            .then(distance => { ultrasonicDistanceElement.textContent = distance; })
+            .catch(error => { ultrasonicDistanceElement.textContent = 'N/A'; });
+    }
+    updateUltrasonicDistance();
+    // Update distance every 300ms (adjust as needed, must be less frequent than Arduino sends)
+    setInterval(updateUltrasonicDistance, 300); 
+
+</script>
+</body>
+</html>
