@@ -2,96 +2,97 @@
 <head>
 <title>Camera MJPEG Stream & Tank Control</title>
 <style>
-/* Adjustments for a responsive, no-scroll layout */
+/* Base Styles */
 html, body {
-    background-color: #333;
-    color: white; /* Set a default text color for better readability */
-    font-family: Arial, sans-serif;
+    background-color: #222; /* Darker background */
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     height: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Prevent scrolling */
+    overflow: hidden; 
 }
 
-.container {
+/* Main Layout Container (Using Flexbox for 3-column layout) */
+.main-layout {
+    display: flex;
+    height: 100vh;
+    padding: 10px;
+    box-sizing: border-box;
+    gap: 15px; /* Space between columns */
+}
+
+/* Common Panel Styling */
+.control-panel, .info-panel {
+    background-color: #333;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    flex-shrink: 0; /* Prevent panels from shrinking */
+    width: 250px; /* Fixed width for side panels */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Center Stream Container */
+.stream-container {
+    flex-grow: 1; /* Takes up all available space */
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    text-align: center;
-    height: 100%;
-    padding: 20px;
-    box-sizing: border-box; /* Include padding in the element's total height and width */
+    padding: 0;
 }
 
-h1 {
-    margin-top: 0;
-    margin-bottom: 20px;
-    font-size: 2em;
-}
-
+/* Video Stream Image */
 img {
-    border: 2px solid #555;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    max-width: 90%;
-    max-height: 50vh; /* Set max height relative to viewport height */
+    border: 3px solid #00bcd4; /* Accent border color */
+    box-shadow: 0 0 25px rgba(0, 188, 212, 0.5); /* Glowing effect */
+    max-width: 100%;
+    max-height: 100%; /* Fill the center area */
+    width: auto;
     height: auto;
-    object-fit: contain; /* Ensure the aspect ratio is maintained */
-    cursor: crosshair; /* Indicate that the video area is for mouse control */
+    object-fit: contain; 
+    cursor: crosshair; 
 }
 
-.info {
-    color: #ccc;
-    margin-top: 20px;
-    font-size: 0.9em;
-}
-
-.status {
-    color: #4CAF50;
-    margin-top: 5px;
-}
-
-.control-container {
-    margin-top: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-}
-
-.gpio-button {
-    background-color: #f44336;
-    border: none;
-    color: white;
-    padding: 15px 32px;
+/* Information Panel Specific Styles */
+.info h2 {
+    color: #00bcd4;
+    margin-top: 0;
+    border-bottom: 2px solid #555;
+    padding-bottom: 5px;
+    width: 100%;
     text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-    margin: 4px 2px;
-    cursor: pointer;
-    border-radius: 12px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    transition: background-color 0.3s, box-shadow 0.3s;
 }
-.gpio-button:active {
-    background-color: #d32f2f;
-    box-shadow: 2px 4px rgba(0, 0, 0, 0.2);
+.info p {
+    margin: 10px 0;
+    font-size: 0.95em;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
 }
-
-.gpio-status {
-    color: #ccc;
-    margin-top: 10px;
-    font-size: 14px;
-}
-.gpio-status.on {
+.info .status {
     color: #4CAF50;
+    font-weight: bold;
 }
-.gpio-status.off {
-    color: #f44336;
+.info span {
+    color: #fff;
+    font-weight: normal;
 }
 
-/* Joystick CSS */
+/* Control Panel Specific Styles (Joystick) */
+.control-panel h2 {
+    color: #FFC107; /* Yellow/Amber for controls */
+    margin-top: 0;
+    border-bottom: 2px solid #555;
+    padding-bottom: 5px;
+    width: 100%;
+    text-align: center;
+}
+
 .joystick-container {
     display: grid;
     grid-template-areas:
@@ -99,24 +100,27 @@ img {
         "left center right"
         ". down .";
     gap: 10px;
-    width: 150px;
-    height: 150px;
-    flex-shrink: 0; /* Prevents joystick from shrinking too much */
+    width: 180px; /* Slightly larger joystick */
+    height: 180px;
+    margin-top: 20px;
 }
 .joystick-button {
     background-color: #555;
     color: white;
-    font-size: 24px;
+    font-size: 28px;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
     border-radius: 5px;
-    transition: background-color 0.2s;
-    user-select: none; /* Prevent text selection on tap */
+    transition: background-color 0.2s, transform 0.1s;
+    user-select: none;
+    box-shadow: 0 3px #444; /* 3D effect */
 }
 .joystick-button:active {
     background-color: #777;
+    transform: translateY(2px);
+    box-shadow: 0 1px #444;
 }
 #up-button { grid-area: up; }
 #down-button { grid-area: down; }
@@ -124,48 +128,81 @@ img {
 #right-button { grid-area: right; }
 #center-button {
     grid-area: center;
-    background-color: #00bcd4; /* Change color for Laser/Fire */
+    background-color: #f44336; /* Red for laser/fire */
     border-radius: 50%;
-    font-size: 18px;
+    font-size: 16px;
+    box-shadow: 0 3px #c63700;
+}
+#center-button:active {
+    background-color: #d32f2f;
+    transform: translateY(2px);
+    box-shadow: 0 1px #c63700;
 }
 
-/* Media query for smaller screens, if needed */
-@media (max-width: 768px) {
-    .container {
-        padding: 10px;
-    }
-    h1 {
-        font-size: 1.5em;
-    }
-    img {
-        max-height: 40vh;
-    }
+.gpio-status {
+    color: #ccc;
+    margin-top: 20px;
+    font-size: 14px;
+    padding: 5px 10px;
+    border-radius: 5px;
 }
+.gpio-status.on {
+    color: #4CAF50;
+    background-color: rgba(76, 175, 80, 0.1);
+}
+.gpio-status.off {
+    color: #f44336;
+    background-color: rgba(244, 67, 54, 0.1);
+}
+
+/* Footer / Header for context */
+.header-title {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #00bcd4;
+    font-size: 1.5em;
+    padding: 5px;
+    z-index: 10;
+}
+
 </style>
 </head>
 <body>
-<div class="container">
-    <h1>Camera MJPEG Stream</h1>
-    <img id="videoStream" src="stream.mjpg" />
-    <div class="info">
-        <p class="status">Time: <span id="piTime">Loading...</span></p>
-        <p>Mouse Position: X: <span id="mouseX">0</span>, Y: <span id="mouseY">0</span></p>
-        <p>Camera Latency: <span id="cameraLatency">N/A</span> ms</p>
-        <p>Tank Command: <span id="keyPressStatus">None</span></p>
-    </div>
+<div class="header-title">Raspberry Pi Tank Control Stream</div>
 
-    <div class="control-container">
-        <h2>Tank & Laser Control (Keyboard: WASD / Space)</h2>
-        
+<div class="main-layout">
+    
+    <div class="control-panel">
+        <h2>Movement Control</h2>
         <div class="joystick-container">
             <div id="up-button" class="joystick-button">&#9650;</div> 
             <div id="down-button" class="joystick-button">&#9660;</div>
             <div id="left-button" class="joystick-button">&#9664;</div>
             <div id="right-button" class="joystick-button">&#9654;</div>
-            <div id="center-button" class="joystick-button">LASER</div>
+            <div id="center-button" class="joystick-button">FIRE</div>
         </div>
-
+        <p style="margin-top: 20px; font-size: 0.9em; color: #aaa;">Keyboard: **WASD** for Movement, **Space** for Fire</p>
         <div id="gpioStatus" class="gpio-status off">Laser Status: OFF</div>
+    </div>
+    
+    <div class="stream-container">
+        <img id="videoStream" src="stream.mjpg" />
+    </div>
+    
+    <div class="info-panel">
+        <h2>Status & Telemetry</h2>
+        <div class="info" style="width: 100%;">
+            <p>Time: <span id="piTime">Loading...</span></p>
+            <p>Latency: <span id="cameraLatency">N/A</span> ms</p>
+            <hr style="border-color: #555; width: 100%; margin: 10px 0;">
+            <p>Command: <span id="keyPressStatus" class="status">None</span></p>
+            <hr style="border-color: #555; width: 100%; margin: 10px 0;">
+            <h3>Turret Aim (Mouse)</h3>
+            <p>Aim X: <span id="mouseX">0</span></p>
+            <p>Aim Y: <span id="mouseY">0</span></p>
+        </div>
     </div>
 </div>
 <audio id="fireSound" src="gunshot.mp3" preload="auto"></audio>
@@ -181,13 +218,10 @@ img {
     const keyPressStatus = document.getElementById('keyPressStatus');
     const fireSound = document.getElementById('fireSound');
 
-    // Use a Set to track which keys are currently pressed
     const pressedKeys = new Set();
-    // Keys that control tank movement
     const movementKeys = new Set(['w', 'a', 's', 'd']); 
     let isFireOn = false;
 
-    // A throttle function to limit how often we send data
     function throttle(func, delay) {
         let inThrottle;
         return function() {
@@ -213,19 +247,15 @@ img {
         }
     }
 
-    // Function to send movement command (W, A, S, D, or X for Stop)
     function sendMovementCommand(command) {
-        // Only send if the command is a valid single character
         if (!['W', 'A', 'S', 'D', 'X'].includes(command.toUpperCase())) return;
         
         fetch(`/tank_command?cmd=${command.toUpperCase()}`)
             .then(response => {
                 if (response.ok) {
-                    // Update status on the web page only for movement commands
                     if (command !== 'X') {
                         keyPressStatus.textContent = command.toUpperCase();
                     } else if (keyPressStatus.textContent !== 'None') {
-                        // Only reset if X is pressed and the current status is a movement key
                         keyPressStatus.textContent = 'X (Stop)'; 
                     }
                 } else {
@@ -239,10 +269,9 @@ img {
 
 
     joystickButtons.forEach(button => {
-        let command = 'X'; // Default stop command
+        let command = 'X'; 
         let isJoystickAction = false;
 
-        // Determine command for directional buttons
         switch (button.id) {
             case 'up-button':
                 command = 'W';
@@ -261,16 +290,14 @@ img {
                 isJoystickAction = true;
                 break;
             case 'center-button':
-                isJoystickAction = false; // Laser control
+                isJoystickAction = false;
                 break;
         }
 
         const handleAction = () => {
             if (isJoystickAction) {
-                // Directional buttons send the movement command
                 sendMovementCommand(command);
             } else {
-                // Center button sends laser ON command and plays sound
                 if (!isFireOn) {
                     isFireOn = true;
                     fetch('/laser_on')
@@ -279,7 +306,6 @@ img {
                                 updateStatus('on');
                                 fireSound.currentTime = 0;
                                 fireSound.play();
-                                console.log('Laser ON and sound played');
                             }
                         })
                         .catch(error => {
@@ -292,17 +318,14 @@ img {
 
         const handleStop = () => {
             if (isJoystickAction) {
-                // Send STOP command 'X' when directional button is released
                 sendMovementCommand('X');
             } else {
-                // Center button sends laser OFF command
                 if (isFireOn) {
                     isFireOn = false;
                     fetch('/laser_off')
                         .then(response => {
                             if (response.ok) {
                                 updateStatus('off');
-                                console.log('Laser turned OFF');
                             }
                         })
                         .catch(error => {
@@ -316,7 +339,6 @@ img {
         button.addEventListener('mousedown', handleAction);
         button.addEventListener('mouseup', handleStop);
 
-        // Add touch events for mobile devices
         button.addEventListener('touchstart', (e) => {
             e.preventDefault();
             handleAction();
@@ -326,7 +348,7 @@ img {
             e.preventDefault();
             handleStop();
         });
-        button.addEventListener('touchcancel', (e) => { // Handle cases where touch is interrupted
+        button.addEventListener('touchcancel', (e) => { 
             e.preventDefault();
             handleStop();
         });
@@ -341,7 +363,6 @@ img {
         }
         pressedKeys.add(key);
         
-        // Handle Spacebar for Fire/Laser
         if (key === ' ') {
             if (!isFireOn) {
                 e.preventDefault();
@@ -355,7 +376,6 @@ img {
                 });
             }
         } 
-        // Handle Movement Keys (W, A, S, D)
         else if (movementKeys.has(key)) {
             sendMovementCommand(key);
         }
@@ -364,37 +384,30 @@ img {
     document.addEventListener('keyup', (e) => {
         const key = e.key.toLowerCase();
         
-        // 1. ลบปุ่มออกจากชุดปุ่มที่ถูกกดค้าง
         pressedKeys.delete(key);
         
-        // Reset the key press status only if all keys are released
         if (pressedKeys.size === 0) {
             keyPressStatus.textContent = 'None';
         }
         
-        // 2. Handle Spacebar release (Stop Fire/Laser)
         if (key === ' ') {
             if (isFireOn) {
                 isFireOn = false;
                 fetch('/laser_off').then(response => { if (response.ok) updateStatus('off'); });
             }
         } 
-        // 3. Handle Movement Key release (W, A, S, D)
         else if (movementKeys.has(key)) {
             
-            // 4. ตรวจสอบว่ามีปุ่มเคลื่อนไหวอื่นที่ยังกดค้างหรือไม่
-            // กรองหาปุ่มเคลื่อนไหวที่ยังเหลืออยู่ใน Set
+            // FIX: Check for remaining movement keys and send that command
             const remainingMovementKeys = Array.from(pressedKeys).filter(k => movementKeys.has(k));
             
             if (remainingMovementKeys.length > 0) {
-                // 5. ถ้ามีปุ่มเหลืออยู่: ส่งคำสั่งของปุ่มที่ถูกกดค้างไว้ล่าสุดซ้ำ
-                // เนื่องจาก Set ไม่มีลำดับเวลา เราจะส่งคำสั่งของปุ่มใดๆ ที่เหลืออยู่
-                // โดยเลือกคำสั่งแรกที่เจอใน remainingMovementKeys (ซึ่งใช้งานได้ในทางปฏิบัติ)
+                // Send the command of the key that is still pressed
                 const nextCommandKey = remainingMovementKeys[0]; 
                 sendMovementCommand(nextCommandKey);
 
             } else {
-                // 6. ถ้าไม่มีปุ่มเคลื่อนไหวเหลืออยู่เลย: ส่งคำสั่งหยุด 'X'
+                // Send stop command
                  sendMovementCommand('X');
             }
         }
@@ -403,20 +416,17 @@ img {
     // Mouse control on the video image (for Pan/Tilt servos)
     const throttledSendPos = throttle((x, y) => {
         fetch(`/set_mouse_pos?x=${x}&y=${y}`).catch(error => console.error('Error:', error));
-    }, 50); // Throttle to send position every 50ms
+    }, 50);
 
     videoStream.addEventListener('mousemove', (e) => {
         const rect = videoStream.getBoundingClientRect();
         const videoWidth = rect.width;
         const videoHeight = rect.height;
 
-        // Calculate mouse position relative to the video image
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        // Translate the coordinates to have the origin (0,0) at the center
         const centerX = x - (videoWidth / 2);
-        // Invert y-axis so moving down results in a negative value (for Pan/Tilt)
         const centerY = (videoHeight / 2) - y;
 
         mouseXElement.textContent = centerX.toFixed(0);
@@ -425,7 +435,7 @@ img {
     });
 
     videoStream.addEventListener('mousedown', (e) => {
-        if (e.button === 0) { // Left mouse button
+        if (e.button === 0) {
             fireSound.currentTime = 0; 
             fireSound.play();
             fetch('/laser_on').catch(error => console.error('Error:', error));
