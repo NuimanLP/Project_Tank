@@ -12,6 +12,16 @@ from datetime import datetime
 import pytz
 
 try:
+    # ----------------------------------------------------
+    # NEW: Import serial library
+    import serial
+    # ----------------------------------------------------
+except ImportError:
+    print("Error: pyserial library not found.")
+    print("Please install it with: pip install pyserial")
+    exit(1)
+
+try:
     from gpiozero import LED, Servo
     GPIO_PIN_ONOFF = 6
     GPIO_PIN_BLINK = 26
@@ -37,9 +47,23 @@ RESOLUTION = (640, 480)
 FRAMERATE = 24
 JPEG_QUALITY = 80
 CAMERA_INDEX = 0
+# ----------------------------------------------------
+# NEW: Serial Port Configuration
+SERIAL_PORT = '/dev/ttyACM0'  # Common port for Arduino on Pi. Use '/dev/ttyS0' for hardware UART
+BAUDRATE = 115200
+# ----------------------------------------------------
 
 # Set Thailand timezone
 THAILAND_TIMEZONE = pytz.timezone('Asia/Bangkok')
+
+# ----------------------------------------------------
+# NEW: Global Serial Object and Lock
+# The serial object should be global to be accessible across threads/functions
+ser = None
+# A lock is crucial for multi-threading to prevent sending corrupted data simultaneously
+serial_lock = threading.Lock() 
+# ----------------------------------------------------
+
 
 class StreamingOutput(io.BufferedIOBase):
     def __init__(self):
@@ -70,6 +94,31 @@ def blink_led(count):
         time.sleep(0.5)
     print("Blink sequence finished or stopped.")
     blink_stop_event.clear()
+
+# ----------------------------------------------------
+# NEW: Function to send command via UART
+def send_command_to_arduino(command):
+    """
+    Sends a single character command to the Arduino via Serial/UART.
+    
+    The command should be a single character: 'W', 'A', 'S', 'D', or 'X' (Stop).
+    """
+    global ser
+    if ser is None:
+        print("Serial port not initialized.")
+        return
+
+    # Acquire the lock to ensure only one thread sends data at a time
+    with serial_lock:
+        try:
+            # Encode the string command to bytes, as serial.write expects bytes
+            ser.write(command.encode('utf-8'))
+            print(f"UART: Sent command '{command}' to Arduino.")
+        except Exception as e:
+            print(f"UART Error sending command: {e}")
+
+# ----------------------------------------------------
+
 
 class MouseControlThread(threading.Thread):
     def __init__(self):
@@ -124,7 +173,8 @@ class MouseControlThread(threading.Thread):
 
     def stop(self):
         self.running = False
-        self.join()
+        # No need to join in this simple example, but good practice in complex apps
+        # self.join() 
 
 mouse_control_thread = MouseControlThread()
 if GPIO_SUPPORT:
@@ -136,6 +186,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
     
     def do_GET(self):
         global current_blink_thread, blink_stop_event
+        
+        # --- Existing code for static files and video stream is here ---
         if self.path == '/':
             self.send_response(301)
             self.send_header('Location', '/index.html')
@@ -163,6 +215,12 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content)
             except FileNotFoundError:
                 self.send_error(404, 'File Not Found: %s' % self.path)
+        
+        # --- GPIO and Time/Latency endpoints ---
+        # The original /gpio_blink has been commented out or removed
+        # as it's replaced by the new /tank_command endpoint for tank movement.
+        
+        # Original GPIO endpoints (ON/OFF, Laser) remain, as they are separate actions
         elif self.path == '/gpio_on':
             if GPIO_SUPPORT:
                 try:
@@ -185,26 +243,31 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     self.send_error(500, f"Error controlling GPIO: {e}")
             else:
                 self.send_error(503, "GPIO control is not available")
-        elif self.path.startswith('/gpio_blink'):
-            if GPIO_SUPPORT:
-                try:
-                    query = self.path.split('?')[-1]
-                    count_str = query.split('=')[-1]
-                    count = int(count_str)
-                    if current_blink_thread and current_blink_thread.is_alive():
-                        print("Stopping previous blink thread...")
-                        blink_stop_event.set()
-                        current_blink_thread.join(timeout=1)
-                    blink_stop_event.clear()
-                    current_blink_thread = threading.Thread(target=lambda: blink_led(count), daemon=True)
-                    current_blink_thread.start()
-                    print(f"Started blinking LED on pin {GPIO_PIN_BLINK} {count} times.")
+        
+        # ----------------------------------------------------
+        # NEW: Endpoint for sending Tank commands to Arduino
+        elif self.path.startswith('/tank_command'):
+            try:
+                # The command is passed as a query parameter: /tank_command?cmd=W
+                query = self.path.split('?')[-1]
+                command = query.split('=')[-1].upper() # Ensure command is uppercase
+                
+                # Validate the command
+                if command in ['W', 'A', 'S', 'D', 'X']: # W, A, S, D, X (stop)
+                    send_command_to_arduino(command)
                     self.send_response(200)
                     self.end_headers()
-                except Exception as e:
-                    self.send_error(500, f"Error blinking GPIO: {e}")
-            else:
-                self.send_error(503, "GPIO control is not available")
+                else:
+                    self.send_error(400, "Invalid Tank Command")
+            except Exception as e:
+                self.send_error(500, f"Error sending tank command: {e}")
+        # ----------------------------------------------------
+        
+        # The original /gpio_blink is now commented out or replaced, 
+        # as its functionality is superseded by /tank_command for movement.
+        # elif self.path.startswith('/gpio_blink'):
+        #     ... (Removed/replaced for clarity and purpose)
+
         elif self.path == '/get_time':
             now_thailand = datetime.now(THAILAND_TIMEZONE)
             time_str = now_thailand.strftime("%H:%M:%S")
@@ -234,6 +297,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             if GPIO_SUPPORT:
                 try:
                     laser.on()
+                    # Optional: Send 'FIRE' command to Arduino for a separate action
+                    # send_command_to_arduino('F') 
                     self.send_response(200)
                     self.end_headers()
                 except Exception as e:
@@ -278,6 +343,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 def stream_camera(camera):
+    # ... (Unchanged) ...
     global last_frame_latency
     frame_count = 0
     error_count = 0
@@ -317,27 +383,70 @@ def stream_camera(camera):
             print(f"Error in streaming: {e}")
             time.sleep(0.1)
 
+
 def cleanup_gpio(signum, frame):
-    print("\nReceived exit signal. Cleaning up GPIO...")
+    global ser
+    print("\nReceived exit signal. Cleaning up...")
     if GPIO_SUPPORT:
         gpio_led_onoff.off()
         gpio_led_blink.off()
         blink_stop_event.set()
-        mouse_control_thread.stop()
+        if 'mouse_control_thread' in globals() and mouse_control_thread.is_alive():
+             mouse_control_thread.stop()
         laser.off()
         print(f"GPIO pins turned OFF.")
-    exit(0)
+    
+    # ----------------------------------------------------
+    # NEW: Clean up Serial Port
+    if ser and ser.is_open:
+        try:
+            # Send 'X' (stop) command before closing
+            ser.write('X'.encode('utf-8'))
+            time.sleep(0.1)
+            ser.close()
+            print("Serial port closed.")
+        except Exception as e:
+            print(f"Error closing serial port: {e}")
+    # ----------------------------------------------------
+            
+    os._exit(0) # Use os._exit to forcefully terminate all threads
 
 def main():
+    global ser
     print("Simple MJPEG Streamer using OpenCV")
     print("===================================")
     signal.signal(signal.SIGINT, cleanup_gpio)
     signal.signal(signal.SIGTERM, cleanup_gpio)
+    
+    # ----------------------------------------------------
+    # NEW: Initialize Serial Port
+    try:
+        # ser = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=0.1)
+        ser = serial.Serial(
+            port=SERIAL_PORT,
+            baudrate=BAUDRATE,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            bytesize=serial.EIGHTBITS,
+            timeout=0.1 # Timeout for read operations
+        )
+        print(f"Successfully opened serial port {SERIAL_PORT} at {BAUDRATE} baud.")
+        # Send an initial stop command
+        send_command_to_arduino('X') 
+    except serial.SerialException as e:
+        print(f"Error: Could not open serial port {SERIAL_PORT}. Check connection and permissions.")
+        print(f"Details: {e}")
+        # Continue running the server without Arduino control
+        ser = None
+    # ----------------------------------------------------
+        
     print(f"Opening camera {CAMERA_INDEX}...")
     cam = cv2.VideoCapture(CAMERA_INDEX)
     if not cam.isOpened():
         print("Error: Cannot open camera")
-        exit(1)
+        # Ensure cleanup runs even on camera failure
+        cleanup_gpio(None, None) 
+    # ... (Rest of camera setup and server start is unchanged) ...
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, RESOLUTION[0])
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, RESOLUTION[1])
     actual_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -348,7 +457,7 @@ def main():
     if not ret:
         print("Error: Cannot read from camera")
         cam.release()
-        exit(1)
+        cleanup_gpio(None, None)
     print("Camera test successful")
     server = ThreadedHTTPServer(('', PORT), StreamingHandler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
