@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RPi Robot Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f9; }
+        .control-area { max-width: 400px; margin: 20px auto; padding: 20px; border: 2px solid #ccc; border-radius: 10px; background-color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .joystick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 300px; margin: 0 auto; }
+        .btn { padding: 20px 10px; font-size: 20px; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.1s; user-select: none; }
+        .btn:active, .btn.active { background-color: #007bff; color: white; }
+        .empty { visibility: hidden; }
+        .status { margin-top: 20px; font-size: 16px; color: #333; }
+        .status-box { background-color: #e9ecef; padding: 10px; border-radius: 5px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>Robot Serial Control (W-A-S-D)</h1>
+    <div class="control-area">
+        <p>Press/Hold the buttons below or use the **W, A, S, D** keys on your keyboard.</p>
+        <div class="joystick">
+            <div class="empty"></div>
+            <button id="up" class="btn" data-count="1" ontouchstart="sendCmd(1)" ontouchend="sendCmd(0)">W</button>
+            <div class="empty"></div>
+
+            <button id="left" class="btn" data-count="4" ontouchstart="sendCmd(4)" ontouchend="sendCmd(0)">A</button>
+            <button id="stop" class="btn" data-count="0" ontouchstart="sendCmd(0)" ontouchend="sendCmd(0)" style="background-color: #dc3545; color: white;">X</button>
+            <button id="right" class="btn" data-count="2" ontouchstart="sendCmd(2)" ontouchend="sendCmd(0)">D</button>
+
+            <div class="empty"></div>
+            <button id="down" class="btn" data-count="3" ontouchstart="sendCmd(3)" ontouchend="sendCmd(0)">S</button>
+            <div class="empty"></div>
+        </div>
+        <div class="status">
+            Last Command Sent: <span id="lastCmd" class="status-box">X (Stop)</span>
+        </div>
+    </div>
+
+    <script>
+        // Global variable to prevent sending redundant stop commands
+        let lastCount = 0;
+        
+        /**
+         * Sends a command value to the Python server via HTTP GET request.
+         * @param {number} count - The command code (1=W, 2=D, 3=S, 4=A, 0=Stop)
+         */
+        function sendCmd(count) {
+            // Only send the command if it's different from the last sent command
+            if (count === lastCount) return;
+
+            // Update status display
+            const cmdMap = {1: 'W (Forward)', 2: 'D (Turn Right)', 3: 'S (Reverse)', 4: 'A (Turn Left)', 0: 'X (Stop)'};
+            document.getElementById('lastCmd').textContent = cmdMap[count];
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+
+            // Set active class on the currently pressed button
+            const activeBtn = document.querySelector(`.btn[data-count="${count}"]`);
+            if (activeBtn && count !== 0) {
+                activeBtn.classList.add('active');
+            }
+
+            // Send the command to the server
+            fetch(`/gpio_blink?count=${count}`)
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Command failed to send:', response.statusText);
+                    }
+                })
+                .catch(error => console.error('Error sending command:', error));
+                
+            lastCount = count; // Update the last sent command
+        }
+
+        // --- Keyboard Control (W, A, S, D) ---
+        const keyMap = {
+            'w': 1, // Forward
+            'd': 2, // Right
+            's': 3, // Reverse
+            'a': 4  // Left
+        };
+
+        let keysPressed = {};
+
+        document.addEventListener('keydown', (event) => {
+            const key = event.key.toLowerCase();
+            if (keyMap[key] && !keysPressed[key]) {
+                keysPressed[key] = true;
+                sendCmd(keyMap[key]);
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            const key = event.key.toLowerCase();
+            if (keyMap[key]) {
+                delete keysPressed[key];
+                // Send stop command only if no other movement keys are still pressed
+                if (Object.keys(keysPressed).length === 0) {
+                    sendCmd(0);
+                }
+            }
+        });
+        
+    </script>
+</body>
+</html>
