@@ -363,8 +363,6 @@ img {
 
     document.addEventListener('keyup', (e) => {
         const key = e.key.toLowerCase();
-        
-        // 1. ลบปุ่มออกจากชุดปุ่มที่ถูกกดค้าง
         pressedKeys.delete(key);
         
         // Reset the key press status only if all keys are released
@@ -372,29 +370,18 @@ img {
             keyPressStatus.textContent = 'None';
         }
         
-        // 2. Handle Spacebar release (Stop Fire/Laser)
+        // Handle Spacebar release (Stop Fire/Laser)
         if (key === ' ') {
             if (isFireOn) {
                 isFireOn = false;
                 fetch('/laser_off').then(response => { if (response.ok) updateStatus('off'); });
             }
         } 
-        // 3. Handle Movement Key release (W, A, S, D)
+        // Handle Movement Key release (Send Stop 'X')
         else if (movementKeys.has(key)) {
-            
-            // 4. ตรวจสอบว่ามีปุ่มเคลื่อนไหวอื่นที่ยังกดค้างหรือไม่
-            // กรองหาปุ่มเคลื่อนไหวที่ยังเหลืออยู่ใน Set
-            const remainingMovementKeys = Array.from(pressedKeys).filter(k => movementKeys.has(k));
-            
-            if (remainingMovementKeys.length > 0) {
-                // 5. ถ้ามีปุ่มเหลืออยู่: ส่งคำสั่งของปุ่มที่ถูกกดค้างไว้ล่าสุดซ้ำ
-                // เนื่องจาก Set ไม่มีลำดับเวลา เราจะส่งคำสั่งของปุ่มใดๆ ที่เหลืออยู่
-                // โดยเลือกคำสั่งแรกที่เจอใน remainingMovementKeys (ซึ่งใช้งานได้ในทางปฏิบัติ)
-                const nextCommandKey = remainingMovementKeys[0]; 
-                sendMovementCommand(nextCommandKey);
-
-            } else {
-                // 6. ถ้าไม่มีปุ่มเคลื่อนไหวเหลืออยู่เลย: ส่งคำสั่งหยุด 'X'
+            // Check if any other movement key is still pressed (e.g., A released while W is held)
+            const anyMovementKeyPressed = Array.from(pressedKeys).some(k => movementKeys.has(k));
+            if (!anyMovementKeyPressed) {
                  sendMovementCommand('X');
             }
         }
