@@ -3,6 +3,8 @@ import cv2
 import io
 import time
 import threading
+# Note: The existing code uses SimpleHTTPRequestHandler but is structured like a server
+# I will keep the existing server/handler setup to maintain compatibility.
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from PIL import Image
@@ -14,7 +16,7 @@ import pytz
 try:
     import serial
 except ImportError:
-    print("Error: pyserial library not found. Please install it with: pip install install pyserial")
+    print("Error: pyserial library not found. Please install it with: pip install pyserial")
     exit(1)
 
 try:
@@ -51,7 +53,7 @@ MAX_STEPS_PER_COMMAND = 10 # Maximum steps to send to Arduino per mouse/joystick
 # The X position range is +/- RESOLUTION[0]/2 = +/- 320
 X_POS_RANGE = RESOLUTION[0] / 2 # 320
 X_SCALE_FACTOR = X_POS_RANGE / MAX_STEPS_PER_COMMAND # 320 / 10 = 32
-# --- NEW: Fixed step size for D-Pad control (Now repurposed for J/K keys in index.html) ---
+# --- NEW: Fixed step size for D-Pad control ---
 TURRET_STEP_DELTA = 3 # Fixed steps for Stepper Pan
 TURRET_TILT_DELTA_ANGLE = 5 # Fixed angle change for Servo Tilt
 # ----------------------------------------------------
@@ -108,15 +110,7 @@ def send_command_to_arduino(command):
 
     with serial_lock:
         try:
-            # We explicitly add \n for Stepper commands P[Steps] and Tank commands W/A/S/D/X are now single chars
-            # But the j/k command should NOT have \n if the Arduino expects single chars
-            if command in ['W', 'A', 'S', 'D', 'X', 'j', 'k']:
-                 ser.write(command.encode('utf-8')) # Send single character
-            elif command.startswith('P'):
-                 ser.write(command.encode('utf-8')) # Send P[Steps]\n
-            else:
-                 ser.write(command.encode('utf-8'))
-            
+            ser.write(command.encode('utf-8'))
             print(f"UART: Sent command '{command.strip()}' to Arduino.")
         except Exception as e:
             print(f"UART Error sending command: {e}")
@@ -157,7 +151,7 @@ def read_serial_data_thread():
 class MouseControlThread(threading.Thread):
     """
     Handles local GPIO Servo control for TILT (Y-axis).
-    The PAN control (X-axis) is now handled via Serial/Stepper motor in the StreamingHandler.
+    The PAN control (X-axis) is now handled via Serial/Stepper motor.
     """
     def __init__(self):
         super().__init__()
@@ -172,10 +166,8 @@ class MouseControlThread(threading.Thread):
         self.TILT_RANGE = 45
 
     def set_pos(self, x, y):
-        """Sets the target position (used by mouse-drag/joystick input)"""
+        """Sets the target position (used by mouse-drag)"""
         with self.lock:
-            # We store X and Y, but the run() loop only acts on Y (TILT) for the Servo.
-            # X (PAN) is handled directly by the HTTP handler and Serial command.
             self.x = x
             self.y = y
 
@@ -187,7 +179,10 @@ class MouseControlThread(threading.Thread):
             # Apply immediately
             if GPIO_SUPPORT:
                 tilt_servo.value = self.current_tilt_angle / 90.0
-            
+                # No need to set target_y as the run loop will use the new current_tilt_angle
+                # But we should update the target_y to match the new angle if we wanted to be perfectly consistent with Mouse Drag
+                # For simplicity, we let the tilt adjustment happen outside the run loop for immediate response
+        
     def run(self):
         if not GPIO_SUPPORT:
             return
@@ -198,11 +193,11 @@ class MouseControlThread(threading.Thread):
         while self.running:
             with self.lock:
                 # target_x = self.x # X is handled by Stepper/Serial now
-                target_y = self.y # This is the Y offset from center (mouse drag/joystick input)
+                target_y = self.y # This is the Y offset from center (mouse drag)
                 current_tilt_angle = self.current_tilt_angle
             
-            # --- TILT SERVO CONTROL (Still active - controlled by mouse drag/joystick Y) ---
-            # Mouse drag/Joystick Y calculates target angle based on position (target_y)
+            # --- TILT SERVO CONTROL (Still active - controlled by mouse drag) ---
+            # Mouse drag calculates target angle based on position (target_y)
             target_tilt_angle = (target_y / HALF_VIDEO_HEIGHT) * self.TILT_RANGE
             target_tilt_angle = max(-self.TILT_RANGE, min(self.TILT_RANGE, target_tilt_angle))
 
@@ -225,7 +220,7 @@ if GPIO_SUPPORT:
 class StreamingHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
-        
+    
     def do_GET(self):
         global current_blink_thread, blink_stop_event, ultrasonic_distance
         
@@ -256,7 +251,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content)
             except FileNotFoundError:
                 self.send_error(404, 'File Not Found: %s' % self.path)
-            
+        
         elif self.path == '/gpio_on':
             if GPIO_SUPPORT:
                 try:
@@ -279,7 +274,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     self.send_error(500, f"Error controlling GPIO: {e}")
             else:
                 self.send_error(503, "GPIO control is not available")
-            
+        
         elif self.path.startswith('/tank_command'):
             try:
                 query = self.path.split('?')[-1]
@@ -293,7 +288,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     self.send_error(400, "Invalid Tank Command")
             except Exception as e:
                 self.send_error(500, f"Error sending tank command: {e}")
-            
+        
         elif self.path == '/get_time':
             now_thailand = datetime.now(THAILAND_TIMEZONE)
             time_str = now_thailand.strftime("%H:%M:%S")
@@ -315,37 +310,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             # Send the global variable value updated by the serial reader thread
             self.wfile.write(str(ultrasonic_distance).encode('utf-8'))
             
-        # --- NEW: Turret Directional Keyboard Control Logic (J/K) ---
-        elif self.path.startswith('/turret_move_key'):
-            if GPIO_SUPPORT:
-                try:
-                    query = self.path.split('?')[-1]
-                    direction = query.split('=')[1].upper()
-                    
-                    command_to_send = ''
-                    
-                    if direction == 'L':
-                        # ส่งตัวอักษร 'j' ให้ Arduino เพื่อหมุนซ้าย
-                        command_to_send = 'j' 
-                    elif direction == 'R':
-                        # ส่งตัวอักษร 'k' ให้ Arduino เพื่อหมุนขวา
-                        command_to_send = 'k' 
-                        
-                    if command_to_send:
-                        send_command_to_arduino(command_to_send)
-                        
-                    self.send_response(200)
-                    self.end_headers()
-                    
-                except Exception as e:
-                    print(f"Error processing /turret_move_key: {e}")
-                    self.send_error(500, f"Error moving turret: {e}")
-            else:
-                self.send_error(503, "GPIO control is not available")
-        # --- END NEW TURRET KEYBOARD CONTROL LOGIC (J/K) ---
-            
-        # --- Turret Directional D-Pad/Joystick Control Logic (Fixed Steps) ---
-        # NOTE: This original D-Pad logic is now redundant if J/K is used, but kept for completeness
+        # --- NEW: Turret Directional D-Pad/Joystick Control Logic ---
         elif self.path.startswith('/turret_move'):
             if GPIO_SUPPORT:
                 try:
@@ -372,7 +337,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                         
                     self.send_response(200)
                     self.end_headers()
-                        
+                    
                 except Exception as e:
                     print(f"Error processing /turret_move: {e}")
                     self.send_error(500, f"Error moving turret: {e}")
@@ -381,7 +346,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         # --- END TURRET DIRECTIONAL CONTROL LOGIC ---
 
         elif self.path.startswith('/set_mouse_pos'):
-            # This endpoint handles proportional positioning, typically used by Mouse Drag or the Right Joystick.
+            # This endpoint still handles the original click-and-drag based positioning
             if GPIO_SUPPORT:
                 try:
                     query_parts = self.path.split('?')[-1].split('&')
@@ -392,19 +357,19 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     x = int(x_str)
                     y = int(y_str)
                     
-                    # 1. *** CONTROL TURRET PAN (Left/Right) via Stepper/Serial (X-axis) ***
-                    # Scale X (position) from +/- 320 (approx) to +/- 10 steps (speed/command magnitude)
+                    # 1. Calculate steps for Stepper Pan (X-axis)
+                    # Scale X from +/- 320 (approx) to +/- 10 steps
                     steps_to_move = int(x / X_SCALE_FACTOR)
                     
                     # Ensure steps is within bounds [-MAX_STEPS_PER_COMMAND, MAX_STEPS_PER_COMMAND]
                     steps_to_move = max(-MAX_STEPS_PER_COMMAND, min(MAX_STEPS_PER_COMMAND, steps_to_move))
                     
                     if abs(steps_to_move) > 0:
-                        # Command format: P[Steps]\n (Requires the modified car.ino to work)
+                        # Command format: P[Steps]\n
                         command = f"P{steps_to_move}\n"
                         send_command_to_arduino(command)
                         
-                    # 2. Control Servo Tilt (Y-axis) via local GPIO thread
+                    # 2. Control Servo Tilt (Y-axis)
                     # Pass X and Y to the thread. The thread's 'run' method only uses Y now.
                     mouse_control_thread.set_pos(x, y) 
 
@@ -416,7 +381,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_error(503, "GPIO control is not available")
         # --- END STEPPER PAN CONTROL LOGIC ---
-            
+        
         elif self.path == '/laser_on':
             if GPIO_SUPPORT:
                 try:
@@ -519,7 +484,7 @@ def cleanup_gpio(signum, frame):
     
     if ser and ser.is_open:
         try:
-            ser.write('X'.encode('utf-8')) # Stop command to Arduino
+            ser.write('X'.encode('utf-8'))
             time.sleep(0.1)
             ser.close()
         except Exception as e:

@@ -14,20 +14,20 @@ import pytz
 try:
     import serial
 except ImportError:
-    print("Error: pyserial library not found. Please install it with: pip install install pyserial")
+    print("Error: pyserial library not found. Please install it with: pip install pyserial")
     exit(1)
 
 try:
     from gpiozero import LED, Servo
     GPIO_PIN_ONOFF = 6
     GPIO_PIN_BLINK = 26
-    GPIO_PAN = 17 # Original GPIO pin for Pan (left/right) servo (Now disabled for Stepper)
-    GPIO_TILT = 18 # GPIO pin for Tilt (up/down) servo (Still active)
+    GPIO_PAN = 17 # GPIO pin for Pan (left/right) servo
+    GPIO_TILT = 18 # GPIO pin for Tilt (up/down) servo
     GPIO_LASER = 27 # GPIO pin for laser
     
     gpio_led_onoff = LED(GPIO_PIN_ONOFF)
     gpio_led_blink = LED(GPIO_PIN_BLINK)
-    pan_servo = Servo(GPIO_PAN) # Still initialized but Pan logic moved to Serial
+    pan_servo = Servo(GPIO_PAN)
     tilt_servo = Servo(GPIO_TILT)
     laser = LED(GPIO_LASER)
     print(f"GPIO pins {GPIO_PIN_ONOFF}, {GPIO_PIN_BLINK}, {GPIO_PAN}, {GPIO_TILT}, and {GPIO_LASER} initialized.")
@@ -43,19 +43,9 @@ FRAMERATE = 24
 JPEG_QUALITY = 80
 CAMERA_INDEX = 0
 # ----------------------------------------------------
-SERIAL_PORT = '/dev/ttyACM0' # Common port for Arduino on Pi. 
+SERIAL_PORT = '/dev/ttyACM0'  # Common port for Arduino on Pi. Use '/dev/ttyS0' for hardware UART
 BAUDRATE = 115200
 # ----------------------------------------------------
-# Stepper Control Configuration
-MAX_STEPS_PER_COMMAND = 10 # Maximum steps to send to Arduino per mouse/joystick update
-# The X position range is +/- RESOLUTION[0]/2 = +/- 320
-X_POS_RANGE = RESOLUTION[0] / 2 # 320
-X_SCALE_FACTOR = X_POS_RANGE / MAX_STEPS_PER_COMMAND # 320 / 10 = 32
-# --- NEW: Fixed step size for D-Pad control (Now repurposed for J/K keys in index.html) ---
-TURRET_STEP_DELTA = 3 # Fixed steps for Stepper Pan
-TURRET_TILT_DELTA_ANGLE = 5 # Fixed angle change for Servo Tilt
-# ----------------------------------------------------
-
 
 # Set Thailand timezone
 THAILAND_TIMEZONE = pytz.timezone('Asia/Bangkok')
@@ -64,7 +54,9 @@ THAILAND_TIMEZONE = pytz.timezone('Asia/Bangkok')
 # Global Serial Object, Lock, and Sensor Data
 ser = None
 serial_lock = threading.Lock()
+# <--- NEW --->
 ultrasonic_distance = "N/A" # Variable to store the distance value (cm)
+# <--- NEW --->
 # ----------------------------------------------------
 
 
@@ -108,21 +100,13 @@ def send_command_to_arduino(command):
 
     with serial_lock:
         try:
-            # We explicitly add \n for Stepper commands P[Steps] and Tank commands W/A/S/D/X are now single chars
-            # But the j/k command should NOT have \n if the Arduino expects single chars
-            if command in ['W', 'A', 'S', 'D', 'X', 'j', 'k']:
-                 ser.write(command.encode('utf-8')) # Send single character
-            elif command.startswith('P'):
-                 ser.write(command.encode('utf-8')) # Send P[Steps]\n
-            else:
-                 ser.write(command.encode('utf-8'))
-            
-            print(f"UART: Sent command '{command.strip()}' to Arduino.")
+            ser.write(command.encode('utf-8'))
+            print(f"UART: Sent command '{command}' to Arduino.")
         except Exception as e:
             print(f"UART Error sending command: {e}")
 # ----------------------------------------------------
 
-# Thread for Reading Ultrasonic Data from Arduino (Unchanged)
+# <--- NEW THREAD: For Reading Ultrasonic Data from Arduino --->
 def read_serial_data_thread():
     """Continuously reads data from the Arduino serial port for sensor values."""
     global ser, ultrasonic_distance
@@ -133,6 +117,7 @@ def read_serial_data_thread():
         
     while True:
         try:
+            # Use serial_lock for reading too, though less critical than writing
             with serial_lock:
                 if ser.in_waiting > 0:
                     # Read until a newline character (Arduino's Serial.println())
@@ -147,18 +132,16 @@ def read_serial_data_thread():
                             # print(f"Distance Received: {ultrasonic_distance} cm") # Debugging
                         except:
                             pass # Ignore malformed lines
-                            
+                        
         except Exception as e:
             print(f"Serial reading thread error: {e}")
             break
         time.sleep(0.01) # Short delay to prevent high CPU usage
+# <--- NEW THREAD END --->
 
 
 class MouseControlThread(threading.Thread):
-    """
-    Handles local GPIO Servo control for TILT (Y-axis).
-    The PAN control (X-axis) is now handled via Serial/Stepper motor in the StreamingHandler.
-    """
+# ... (MouseControlThread code is UNCHANGED) ...
     def __init__(self):
         super().__init__()
         self.daemon = True
@@ -166,52 +149,46 @@ class MouseControlThread(threading.Thread):
         self.y = 0
         self.running = True
         self.lock = threading.Lock()
-        # Track the current tilt angle for incremental adjustments (D-Pad)
-        self.current_tilt_angle = 0
-        self.PAN_RANGE = 90
-        self.TILT_RANGE = 45
-
+    
     def set_pos(self, x, y):
-        """Sets the target position (used by mouse-drag/joystick input)"""
         with self.lock:
-            # We store X and Y, but the run() loop only acts on Y (TILT) for the Servo.
-            # X (PAN) is handled directly by the HTTP handler and Serial command.
             self.x = x
             self.y = y
 
-    def adjust_tilt(self, delta_angle):
-        """Adjusts the tilt angle incrementally (used by D-Pad)"""
-        with self.lock:
-            new_angle = self.current_tilt_angle + delta_angle
-            self.current_tilt_angle = max(-self.TILT_RANGE, min(self.TILT_RANGE, new_angle))
-            # Apply immediately
-            if GPIO_SUPPORT:
-                tilt_servo.value = self.current_tilt_angle / 90.0
-            
     def run(self):
         if not GPIO_SUPPORT:
             return
 
-        VIDEO_HEIGHT = RESOLUTION[1]
-        HALF_VIDEO_HEIGHT = VIDEO_HEIGHT / 2
+        current_pan_angle = 0
+        current_tilt_angle = 0
         
+        PAN_RANGE = 90
+        TILT_RANGE = 45
+        
+        VIDEO_WIDTH = RESOLUTION[0]
+        VIDEO_HEIGHT = RESOLUTION[1]
+        
+        HALF_VIDEO_WIDTH = VIDEO_WIDTH / 2
+        HALF_VIDEO_HEIGHT = VIDEO_HEIGHT / 2
+
         while self.running:
             with self.lock:
-                # target_x = self.x # X is handled by Stepper/Serial now
-                target_y = self.y # This is the Y offset from center (mouse drag/joystick input)
-                current_tilt_angle = self.current_tilt_angle
+                target_x = self.x
+                target_y = self.y
             
-            # --- TILT SERVO CONTROL (Still active - controlled by mouse drag/joystick Y) ---
-            # Mouse drag/Joystick Y calculates target angle based on position (target_y)
-            target_tilt_angle = (target_y / HALF_VIDEO_HEIGHT) * self.TILT_RANGE
-            target_tilt_angle = max(-self.TILT_RANGE, min(self.TILT_RANGE, target_tilt_angle))
+            target_pan_angle = (target_x / HALF_VIDEO_WIDTH) * PAN_RANGE
+            target_tilt_angle = (target_y / HALF_VIDEO_HEIGHT) * TILT_RANGE
+            
+            target_pan_angle = max(-PAN_RANGE, min(PAN_RANGE, target_pan_angle))
+            target_tilt_angle = max(-TILT_RANGE, min(TILT_RANGE, target_tilt_angle))
 
-            # Only move if the drag target angle is significantly different from the current angle
+            if abs(target_pan_angle - current_pan_angle) > 1:
+                current_pan_angle += (target_pan_angle - current_pan_angle) * 0.1
+                pan_servo.value = current_pan_angle / 90.0
+            
             if abs(target_tilt_angle - current_tilt_angle) > 1:
-                # Smooth transition towards the dragged target position
-                self.current_tilt_angle += (target_tilt_angle - current_tilt_angle) * 0.1
-                # Control the TILT servo
-                tilt_servo.value = self.current_tilt_angle / 90.0
+                current_tilt_angle += (target_tilt_angle - current_tilt_angle) * 0.1
+                tilt_servo.value = current_tilt_angle / 90.0
 
             time.sleep(0.01)
 
@@ -225,11 +202,11 @@ if GPIO_SUPPORT:
 class StreamingHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
-        
+    
     def do_GET(self):
         global current_blink_thread, blink_stop_event, ultrasonic_distance
         
-        # --- Existing code for static files, GPIO, and video stream ---
+        # --- Existing code for static files, GPIO, and video stream is here ---
         if self.path == '/':
             self.send_response(301)
             self.send_header('Location', '/index.html')
@@ -256,7 +233,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content)
             except FileNotFoundError:
                 self.send_error(404, 'File Not Found: %s' % self.path)
-            
+        
         elif self.path == '/gpio_on':
             if GPIO_SUPPORT:
                 try:
@@ -279,7 +256,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     self.send_error(500, f"Error controlling GPIO: {e}")
             else:
                 self.send_error(503, "GPIO control is not available")
-            
+        
         elif self.path.startswith('/tank_command'):
             try:
                 query = self.path.split('?')[-1]
@@ -293,7 +270,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     self.send_error(400, "Invalid Tank Command")
             except Exception as e:
                 self.send_error(500, f"Error sending tank command: {e}")
-            
+        
         elif self.path == '/get_time':
             now_thailand = datetime.now(THAILAND_TIMEZONE)
             time_str = now_thailand.strftime("%H:%M:%S")
@@ -307,116 +284,28 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(f"{last_frame_latency:.2f}".encode('utf-8'))
             
-        # Endpoint to fetch real-time ultrasonic distance
+        # <--- NEW ENDPOINT: /get_distance --->
         elif self.path == '/get_distance':
             self.send_response(200)
             self.send_header('Content-Type', 'text/plain')
             self.end_headers()
-            # Send the global variable value updated by the serial reader thread
+            # Send the global variable value
             self.wfile.write(str(ultrasonic_distance).encode('utf-8'))
-            
-        # --- NEW: Turret Directional Keyboard Control Logic (J/K) ---
-        elif self.path.startswith('/turret_move_key'):
-            if GPIO_SUPPORT:
-                try:
-                    query = self.path.split('?')[-1]
-                    direction = query.split('=')[1].upper()
-                    
-                    command_to_send = ''
-                    
-                    if direction == 'L':
-                        # ส่งตัวอักษร 'j' ให้ Arduino เพื่อหมุนซ้าย
-                        command_to_send = 'j' 
-                    elif direction == 'R':
-                        # ส่งตัวอักษร 'k' ให้ Arduino เพื่อหมุนขวา
-                        command_to_send = 'k' 
-                        
-                    if command_to_send:
-                        send_command_to_arduino(command_to_send)
-                        
-                    self.send_response(200)
-                    self.end_headers()
-                    
-                except Exception as e:
-                    print(f"Error processing /turret_move_key: {e}")
-                    self.send_error(500, f"Error moving turret: {e}")
-            else:
-                self.send_error(503, "GPIO control is not available")
-        # --- END NEW TURRET KEYBOARD CONTROL LOGIC (J/K) ---
-            
-        # --- Turret Directional D-Pad/Joystick Control Logic (Fixed Steps) ---
-        # NOTE: This original D-Pad logic is now redundant if J/K is used, but kept for completeness
-        elif self.path.startswith('/turret_move'):
-            if GPIO_SUPPORT:
-                try:
-                    query = self.path.split('?')[-1]
-                    direction = query.split('=')[1].upper()
-                    
-                    steps_to_move = 0
-                    
-                    if direction == 'L':
-                        steps_to_move = -TURRET_STEP_DELTA # Pan Left (Stepper)
-                    elif direction == 'R':
-                        steps_to_move = TURRET_STEP_DELTA  # Pan Right (Stepper)
-                    elif direction == 'U':
-                        # Tilt Up (Servo, controlled locally on Pi)
-                        mouse_control_thread.adjust_tilt(TURRET_TILT_DELTA_ANGLE)
-                    elif direction == 'D':
-                        # Tilt Down (Servo, controlled locally on Pi)
-                        mouse_control_thread.adjust_tilt(-TURRET_TILT_DELTA_ANGLE)
-                        
-                    if abs(steps_to_move) > 0:
-                        # Command format: P[Steps]\n
-                        command = f"P{steps_to_move}\n"
-                        send_command_to_arduino(command)
-                        
-                    self.send_response(200)
-                    self.end_headers()
-                        
-                except Exception as e:
-                    print(f"Error processing /turret_move: {e}")
-                    self.send_error(500, f"Error moving turret: {e}")
-            else:
-                self.send_error(503, "GPIO control is not available")
-        # --- END TURRET DIRECTIONAL CONTROL LOGIC ---
-
+        # <--- NEW ENDPOINT END --->
+        
         elif self.path.startswith('/set_mouse_pos'):
-            # This endpoint handles proportional positioning, typically used by Mouse Drag or the Right Joystick.
             if GPIO_SUPPORT:
                 try:
                     query_parts = self.path.split('?')[-1].split('&')
-                    # Note: We assume x is the first param, y is the second
-                    x_str = query_parts[0].split('=')[1]
-                    y_str = query_parts[1].split('=')[1]
-                    
-                    x = int(x_str)
-                    y = int(y_str)
-                    
-                    # 1. *** CONTROL TURRET PAN (Left/Right) via Stepper/Serial (X-axis) ***
-                    # Scale X (position) from +/- 320 (approx) to +/- 10 steps (speed/command magnitude)
-                    steps_to_move = int(x / X_SCALE_FACTOR)
-                    
-                    # Ensure steps is within bounds [-MAX_STEPS_PER_COMMAND, MAX_STEPS_PER_COMMAND]
-                    steps_to_move = max(-MAX_STEPS_PER_COMMAND, min(MAX_STEPS_PER_COMMAND, steps_to_move))
-                    
-                    if abs(steps_to_move) > 0:
-                        # Command format: P[Steps]\n (Requires the modified car.ino to work)
-                        command = f"P{steps_to_move}\n"
-                        send_command_to_arduino(command)
-                        
-                    # 2. Control Servo Tilt (Y-axis) via local GPIO thread
-                    # Pass X and Y to the thread. The thread's 'run' method only uses Y now.
-                    mouse_control_thread.set_pos(x, y) 
-
+                    x = int(query_parts[0].split('=')[1])
+                    y = int(query_parts[1].split('=')[1])
+                    mouse_control_thread.set_pos(x, y)
                     self.send_response(200)
                     self.end_headers()
                 except Exception as e:
-                    print(f"Error processing /set_mouse_pos: {e}")
-                    self.send_error(500, f"Error setting mouse/stepper position: {e}")
+                    self.send_error(500, f"Error setting mouse position: {e}")
             else:
                 self.send_error(503, "GPIO control is not available")
-        # --- END STEPPER PAN CONTROL LOGIC ---
-            
         elif self.path == '/laser_on':
             if GPIO_SUPPORT:
                 try:
@@ -465,6 +354,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 def stream_camera(camera):
+# ... (stream_camera code is UNCHANGED) ...
     global last_frame_latency
     frame_count = 0
     error_count = 0
@@ -506,6 +396,7 @@ def stream_camera(camera):
 
 
 def cleanup_gpio(signum, frame):
+# ... (cleanup_gpio code is UNCHANGED) ...
     global ser
     print("\nReceived exit signal. Cleaning up...")
     if GPIO_SUPPORT:
@@ -519,9 +410,10 @@ def cleanup_gpio(signum, frame):
     
     if ser and ser.is_open:
         try:
-            ser.write('X'.encode('utf-8')) # Stop command to Arduino
+            ser.write('X'.encode('utf-8'))
             time.sleep(0.1)
             ser.close()
+            print("Serial port closed.")
         except Exception as e:
             print(f"Error closing serial port: {e}")
     os._exit(0)
@@ -534,7 +426,7 @@ def main():
     signal.signal(signal.SIGTERM, cleanup_gpio)
     
     # ----------------------------------------------------
-    # Initialize Serial Port
+    # Initialize Serial Port (Unchanged)
     try:
         ser = serial.Serial(
             port=SERIAL_PORT,
@@ -545,12 +437,12 @@ def main():
             timeout=0.1
         )
         print(f"Successfully opened serial port {SERIAL_PORT} at {BAUDRATE} baud.")
-        # Send stop command to Arduino
-        send_command_to_arduino('X') 
+        send_command_to_arduino('X')
         
-        # START SERIAL READER THREAD
+        # <--- NEW: START SERIAL READER THREAD HERE --->
         serial_reader_thread = threading.Thread(target=read_serial_data_thread, daemon=True)
         serial_reader_thread.start()
+        # <--- NEW END --->
         
     except serial.SerialException as e:
         print(f"Error: Could not open serial port {SERIAL_PORT}. Check connection and permissions.")

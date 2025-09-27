@@ -3,6 +3,8 @@ import cv2
 import io
 import time
 import threading
+# Note: The existing code uses SimpleHTTPRequestHandler but is structured like a server
+# I will keep the existing server/handler setup to maintain compatibility.
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from PIL import Image
@@ -51,7 +53,7 @@ MAX_STEPS_PER_COMMAND = 10 # Maximum steps to send to Arduino per mouse/joystick
 # The X position range is +/- RESOLUTION[0]/2 = +/- 320
 X_POS_RANGE = RESOLUTION[0] / 2 # 320
 X_SCALE_FACTOR = X_POS_RANGE / MAX_STEPS_PER_COMMAND # 320 / 10 = 32
-# --- NEW: Fixed step size for D-Pad control (Now repurposed for J/K keys in index.html) ---
+# --- NEW: Fixed step size for D-Pad control ---
 TURRET_STEP_DELTA = 3 # Fixed steps for Stepper Pan
 TURRET_TILT_DELTA_ANGLE = 5 # Fixed angle change for Servo Tilt
 # ----------------------------------------------------
@@ -108,15 +110,7 @@ def send_command_to_arduino(command):
 
     with serial_lock:
         try:
-            # We explicitly add \n for Stepper commands P[Steps] and Tank commands W/A/S/D/X are now single chars
-            # But the j/k command should NOT have \n if the Arduino expects single chars
-            if command in ['W', 'A', 'S', 'D', 'X', 'j', 'k']:
-                 ser.write(command.encode('utf-8')) # Send single character
-            elif command.startswith('P'):
-                 ser.write(command.encode('utf-8')) # Send P[Steps]\n
-            else:
-                 ser.write(command.encode('utf-8'))
-            
+            ser.write(command.encode('utf-8'))
             print(f"UART: Sent command '{command.strip()}' to Arduino.")
         except Exception as e:
             print(f"UART Error sending command: {e}")
@@ -225,7 +219,7 @@ if GPIO_SUPPORT:
 class StreamingHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
-        
+    
     def do_GET(self):
         global current_blink_thread, blink_stop_event, ultrasonic_distance
         
@@ -315,37 +309,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             # Send the global variable value updated by the serial reader thread
             self.wfile.write(str(ultrasonic_distance).encode('utf-8'))
             
-        # --- NEW: Turret Directional Keyboard Control Logic (J/K) ---
-        elif self.path.startswith('/turret_move_key'):
-            if GPIO_SUPPORT:
-                try:
-                    query = self.path.split('?')[-1]
-                    direction = query.split('=')[1].upper()
-                    
-                    command_to_send = ''
-                    
-                    if direction == 'L':
-                        # ส่งตัวอักษร 'j' ให้ Arduino เพื่อหมุนซ้าย
-                        command_to_send = 'j' 
-                    elif direction == 'R':
-                        # ส่งตัวอักษร 'k' ให้ Arduino เพื่อหมุนขวา
-                        command_to_send = 'k' 
-                        
-                    if command_to_send:
-                        send_command_to_arduino(command_to_send)
-                        
-                    self.send_response(200)
-                    self.end_headers()
-                    
-                except Exception as e:
-                    print(f"Error processing /turret_move_key: {e}")
-                    self.send_error(500, f"Error moving turret: {e}")
-            else:
-                self.send_error(503, "GPIO control is not available")
-        # --- END NEW TURRET KEYBOARD CONTROL LOGIC (J/K) ---
-            
         # --- Turret Directional D-Pad/Joystick Control Logic (Fixed Steps) ---
-        # NOTE: This original D-Pad logic is now redundant if J/K is used, but kept for completeness
         elif self.path.startswith('/turret_move'):
             if GPIO_SUPPORT:
                 try:
@@ -372,7 +336,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                         
                     self.send_response(200)
                     self.end_headers()
-                        
+                    
                 except Exception as e:
                     print(f"Error processing /turret_move: {e}")
                     self.send_error(500, f"Error moving turret: {e}")
@@ -400,7 +364,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     steps_to_move = max(-MAX_STEPS_PER_COMMAND, min(MAX_STEPS_PER_COMMAND, steps_to_move))
                     
                     if abs(steps_to_move) > 0:
-                        # Command format: P[Steps]\n (Requires the modified car.ino to work)
+                        # Command format: P[Steps]\n
                         command = f"P{steps_to_move}\n"
                         send_command_to_arduino(command)
                         
@@ -416,7 +380,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_error(503, "GPIO control is not available")
         # --- END STEPPER PAN CONTROL LOGIC ---
-            
+        
         elif self.path == '/laser_on':
             if GPIO_SUPPORT:
                 try:
@@ -519,7 +483,7 @@ def cleanup_gpio(signum, frame):
     
     if ser and ser.is_open:
         try:
-            ser.write('X'.encode('utf-8')) # Stop command to Arduino
+            ser.write('X'.encode('utf-8'))
             time.sleep(0.1)
             ser.close()
         except Exception as e:

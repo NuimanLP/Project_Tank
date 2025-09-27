@@ -252,8 +252,8 @@ img {
         <div id="virtualJoystickAux">
             <div id="joystickThumbAux"></div>
         </div>
+        <!-- แก้ไขข้อความนี้เพื่อระบุว่าจอยสติ๊กควบคุม Pan/Tilt (หมุนซ้ายขวา/เงยขึ้นลง) -->
         <p style="margin-top: 15px; font-size: 0.9em; color: #aaa;">Aux: **Pan/Tilt** (Turret Rotation)</p>
-        <p style="margin-top: 5px; font-size: 0.9em; color: #aaa;">Keyboard: **J/K** for Pan</p>
         
         <div id="fireButton">FIRE</div>
     </div>
@@ -271,6 +271,8 @@ img {
     const keyPressStatus = document.getElementById('keyPressStatus');
     const ultrasonicDistanceElement = document.getElementById('ultrasonicDistance');
     const fireSound = document.getElementById('fireSound');
+    // const tiltSlider = document.getElementById('tiltSlider'); // ลบทิ้ง
+    // const tiltValueElement = document.getElementById('tiltValue'); // ลบทิ้ง
     
     // --- MAIN JOYSTICK ELEMENTS ---
     const joystick = document.getElementById('virtualJoystick');
@@ -294,19 +296,12 @@ img {
     let isDraggingAux = false;
     let lastAuxCommandX = 0;
     let lastAuxCommandY = 0;
-    let auxPanCommandInterval = null; // สำหรับ Auto-repeat Pan Command
-    const AUX_PAN_THRESHOLD = 50; // ระยะที่ต้องขยับแกน X (ในพิกเซล) ก่อนจะเริ่มส่งคำสั่ง
     // --- END AUX JOYSTICK ELEMENTS ---
     
     const fireButton = document.getElementById('fireButton');
     const pressedKeys = new Set();
     const movementKeys = new Set(['w', 'a', 's', 'd']);
-    const turretKeys = new Set(['j', 'k']);
     let isFireOn = false;
-
-    // ******************** ส่วนควบคุมการกดค้าง (J/K) ********************
-    let turretPanInterval = null;
-    const TURRET_PAN_INTERVAL_MS = 150; // ส่งคำสั่งซ้ำทุก 150ms
 
     function throttle(func, delay) {
         let inThrottle;
@@ -345,50 +340,13 @@ img {
             });
     }
 
-    // ฟังก์ชันส่งคำสั่ง Turret สำหรับปุ่ม J/K และ Aux Joystick
-    function sendTurretCommand(direction) {
-        // Direction จะเป็น 'L' (j) หรือ 'R' (k)
-        fetch(`/turret_move_key?dir=${direction}`)
-            .then(response => {
-                if (response.ok) {
-                    keyPressStatus.textContent = `Turret ${direction}`;
-                }
-            })
-            .catch(error => { console.error('Error sending turret command:', error); });
-    }
-
-    function startTurretPan(direction) {
-        // ถ้ามีการกดปุ่มทิศทางอื่นค้างอยู่ ให้ยกเลิก interval เดิมก่อน
-        if (turretPanInterval !== null) {
-            clearInterval(turretPanInterval);
-        }
-
-        // 1. ส่งคำสั่งทันที
-        sendTurretCommand(direction);
-
-        // 2. ตั้งค่าให้ส่งคำสั่งซ้ำทุกๆ TURRET_PAN_INTERVAL_MS
-        turretPanInterval = setInterval(() => {
-            sendTurretCommand(direction);
-        }, TURRET_PAN_INTERVAL_MS);
-    }
-
-    function stopTurretPan() {
-        if (turretPanInterval !== null) {
-            clearInterval(turretPanInterval);
-            turretPanInterval = null;
-            // ไม่ต้องส่งคำสั่งหยุด เพราะ Stepper จะหยุดเองเมื่อ steps ครบ
-        }
-    }
-    // ******************** สิ้นสุดส่วนควบคุมการกดค้าง (J/K) ********************
-
-
-    // ฟังก์ชันส่งคำสั่งควบคุมเสริม (Auxiliary Joystick/Mouse Drag - Proportional Control)
+    // ฟังก์ชันส่งคำสั่งควบคุมเสริม (Auxiliary Joystick)
     function sendAuxCommand(x, y) {
-        // NOTE: ฟังก์ชันนี้ใช้สำหรับการควบคุมแบบ Proportional (Mouse Drag)
-        const threshold = 5;
+        // ค่า x คือ Pan (หมุนซ้าย-ขวา) และ y คือ Tilt (เงยขึ้น-ลง)
+        const threshold = 5; // ลดการส่งข้อมูลถ้าค่าไม่เปลี่ยนมาก
         if (Math.abs(x - lastAuxCommandX) < threshold && Math.abs(y - lastAuxCommandY) < threshold) return;
 
-        fetch(`/set_mouse_pos?x=${x}&y=${y}`) 
+        fetch(`/set_aux_pan_tilt?x=${x}&y=${y}`)
             .then(response => {
                 if (response.ok) {
                     lastAuxCommandX = x;
@@ -472,17 +430,12 @@ img {
     // --- END MAIN JOYSTICK LOGIC ---
     
     
-    // --- AUX JOYSTICK LOGIC (ส่วนที่แก้ไข) ---
+    // --- AUX JOYSTICK LOGIC (New) ---
+    // โค้ดนี้ถูกออกแบบมาอย่างถูกต้องแล้ว โดย Pan (X-axis) ใช้สำหรับหมุนซ้าย-ขวา
     function handleJoystickAuxStart(e) {
         e.preventDefault();
         isDraggingAux = true;
         thumbAux.style.transition = 'none';
-        
-        // เคลียร์ interval เก่า
-        if (auxPanCommandInterval) {
-            clearInterval(auxPanCommandInterval);
-            auxPanCommandInterval = null;
-        }
     }
     
     function handleJoystickAuxMove(e) {
@@ -499,38 +452,12 @@ img {
 
         thumbAux.style.transform = `translate(${dx}px, ${dy}px)`;
         
-        // ******************** Logic ใหม่สำหรับ Aux Joystick Pan ********************
+        // แปลงค่า dx (หมุนซ้ายขวา) และ dy (เงยขึ้นลง) เป็นค่า -100 ถึง 100 เพื่อส่งไป Server
+        const commandX = Math.round((dx / maxDistanceAux) * 100);
+        const commandY = Math.round((dy / maxDistanceAux) * 100);
         
-        let direction = null;
-        if (dx < -AUX_PAN_THRESHOLD) {
-            direction = 'L'; // Left (j)
-        } else if (dx > AUX_PAN_THRESHOLD) {
-            direction = 'R'; // Right (k)
-        } 
-        
-        // จัดการการส่งคำสั่งต่อเนื่อง
-        if (direction) {
-            if (auxPanCommandInterval === null) {
-                // เริ่มส่งคำสั่งซ้ำ
-                auxPanCommandInterval = setInterval(() => {
-                    sendTurretCommand(direction);
-                }, TURRET_PAN_INTERVAL_MS);
-                
-                // ส่งคำสั่งครั้งแรกทันที
-                sendTurretCommand(direction);
-            }
-        } else {
-            // ถ้าอยู่ในบริเวณตรงกลาง (หยุด)
-            if (auxPanCommandInterval !== null) {
-                clearInterval(auxPanCommandInterval);
-                auxPanCommandInterval = null;
-                keyPressStatus.textContent = 'None';
-            }
-        }
-        
-        // แกน Y (dy) ยังไม่มี Logic การส่งคำสั่งสำหรับ Tilt
-        
-        // ******************** สิ้นสุด Logic ใหม่ ********************
+        // commandX คือค่า Pan (Rotation) และ commandY คือค่า Tilt (Elevation)
+        throttledSendAuxCommand(commandX, commandY);
     }
 
     function handleJoystickAuxEnd() {
@@ -540,12 +467,8 @@ img {
         thumbAux.style.transition = 'transform 0.2s ease-out';
         thumbAux.style.transform = 'translate(0px, 0px)';
         
-        // หยุดส่งคำสั่งเมื่อปล่อย
-        if (auxPanCommandInterval !== null) {
-            clearInterval(auxPanCommandInterval);
-            auxPanCommandInterval = null;
-            keyPressStatus.textContent = 'None';
-        }
+        // ส่งคำสั่งหยุด (Pan=0, Tilt=0)
+        sendAuxCommand(0, 0);
     }
     
     joystickAux.addEventListener('mousedown', handleJoystickAuxStart);
@@ -613,7 +536,7 @@ img {
     // --- END LASER FIRE LOGIC ---
 
 
-    // --- KEYBOARD CONTROL (J/K Key Hold Support) ---
+    // --- KEYBOARD CONTROL (ยังอยู่) ---
     document.addEventListener('keydown', (e) => {
         const key = e.key.toLowerCase();
         
@@ -628,20 +551,6 @@ img {
         }
         else if (movementKeys.has(key)) {
             sendMovementCommand(key);
-        }
-        // J/K Key Hold Logic
-        else if (turretKeys.has(key)) {
-            // หยุดการควบคุม Pan จาก Joystick Aux ชั่วคราว ถ้ามีการเริ่มควบคุมด้วยคีย์บอร์ด
-            if (auxPanCommandInterval) {
-                clearInterval(auxPanCommandInterval);
-                auxPanCommandInterval = null;
-            }
-            
-            if (key === 'j') {
-                startTurretPan('L'); // Left - เริ่มส่งคำสั่งซ้ำ
-            } else if (key === 'k') {
-                startTurretPan('R'); // Right - เริ่มส่งคำสั่งซ้ำ
-            }
         }
     });
 
@@ -664,15 +573,10 @@ img {
                 sendMovementCommand('X');
             }
         }
-        // J/K Key Release Logic
-        else if (turretKeys.has(key)) {
-            stopTurretPan(); // หยุดส่งคำสั่งซ้ำ
-            keyPressStatus.textContent = 'None'; 
-        }
     });
     // --- END KEYBOARD CONTROL ---
     
-    // Mouse control on the video image (for Pan/Tilt servos - Proportional Control)
+    // Mouse control on the video image (for Pan/Tilt servos)
     const throttledSendPos = throttle((x, y) => {
         fetch(`/set_mouse_pos?x=${x}&y=${y}`).catch(error => console.error('Error:', error));
     }, 50);
@@ -685,10 +589,8 @@ img {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        // X: -Width/2 to +Width/2 (Pan: Left to Right)
-        const centerX = x - (videoWidth / 2); 
-        // Y: +Height/2 to -Height/2 (Tilt: Up to Down - Invert Y axis for typical control)
-        const centerY = (videoHeight / 2) - y; 
+        const centerX = x - (videoWidth / 2);
+        const centerY = (videoHeight / 2) - y;
 
         mouseXElement.textContent = centerX.toFixed(0);
         mouseYElement.textContent = centerY.toFixed(0);
