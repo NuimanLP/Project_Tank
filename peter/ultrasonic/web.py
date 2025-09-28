@@ -43,7 +43,7 @@ FRAMERATE = 24
 JPEG_QUALITY = 80
 CAMERA_INDEX = 0
 # ----------------------------------------------------
-SERIAL_PORT = '/dev/ttyACM0' # Common port for Arduino on Pi. 
+SERIAL_PORT = '/dev/ttyAMA0' # Common port for Arduino on Pi. 
 BAUDRATE = 115200
 # ----------------------------------------------------
 # Stepper Control Configuration
