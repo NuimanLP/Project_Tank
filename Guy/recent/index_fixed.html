@@ -449,36 +449,6 @@
 
         let firing = 0;
 
-        // Improved throttle with cleanup
-        function throttle(func, delay) {
-            let inThrottle;
-            let timeoutId;
-
-            const throttled = function () {
-                const args = arguments;
-                const context = this;
-                if (!inThrottle) {
-                    func.apply(context, args);
-                    inThrottle = true;
-                    timeoutId = setTimeout(() => {
-                        inThrottle = false;
-                        timeoutId = null;
-                    }, delay);
-                    cleanupManager.addTimeout(timeoutId);
-                }
-            };
-
-            // Add cleanup method
-            throttled.cancel = () => {
-                if (timeoutId) {
-                    clearTimeout(timeoutId);
-                    timeoutId = null;
-                    inThrottle = false;
-                }
-            };
-
-            return throttled;
-        }
 
         // Safe fetch with abort controller
         function safeFetch(url, options = {}) {
@@ -492,50 +462,6 @@
                 cleanupManager.abortControllers.delete(controller);
             });
         }
-
-        // ฟังก์ชันส่งคำสั่งเคลื่อนที่ (Main Joystick)
-        function sendMovementCommand(command) {
-            if (!['W', 'A', 'S', 'D', 'X'].includes(command.toUpperCase())) return;
-            console.log(command);
-            if (command.toUpperCase() === lastCommand) return;
-
-            safeFetch(`/tank_command?cmd=${command.toUpperCase()}`)
-                .then(response => {
-                    if (response.ok) {
-                        lastCommand = command.toUpperCase();
-                        if (command !== 'X') {
-                            keyPressStatus.textContent = command.toUpperCase();
-                        } else {
-                            keyPressStatus.textContent = 'X (Stop)';
-                        }
-                    } else {
-                        console.error(`Failed to send tank command: ${command.toUpperCase()}`);
-                    }
-                })
-                .catch(error => {
-                    if (error.name !== 'AbortError') {
-                        console.error('Error sending tank command:', error);
-                    }
-                });
-        }
-
-        // ฟังก์ชันส่งคำสั่ง Turret สำหรับปุ่ม J/K และ Aux Joystick
-        function sendTurretCommand(direction) {
-            const command = (direction === 'L' || direction === 'R') ? direction : 'T';
-
-            safeFetch(`/turret_move_key?dir=${command}`)
-                .then(response => {
-                    if (response.ok) {
-                        keyPressStatus.textContent = (command === 'T') ? 'None' : `Turret ${command}`;
-                    }
-                })
-                .catch(error => {
-                    if (error.name !== 'AbortError') {
-                        console.error('Error sending turret command:', error);
-                    }
-                });
-        }
-
 
         // --- MAIN JOYSTICK LOGIC ---
         function handleJoystickStart(e) {
@@ -563,7 +489,6 @@
             e.preventDefault();
 
             let { dx, dy, distance } = getJoystickPosition(e, joystick, joystickRadius);
-            let command = 'X';
 
             if (distance > maxDistance) {
                 const angle = Math.atan2(dy, dx);
@@ -574,11 +499,6 @@
             thumb.style.transform = `translate(${dx}px, ${dy}px)`;
 
             if (distance > threshold) {
-                if (Math.abs(dy) > Math.abs(dx)) {
-                    command = (dy < 0) ? 'W' : 'S';
-                } else {
-                    command = (dx > 0) ? 'D' : 'A';
-                }
                 leftJoystickY = Math.round(dy * 10 / maxDistance * -1);
                 leftJoystickX = Math.round(dx * 10 / maxDistance * -1);
             } else {
@@ -821,16 +741,6 @@
             const encodedCommand = encodeURIComponent(rawCommand);
 
             pendingRequest = safeFetch(`/tank_command?cmd=${encodedCommand}`)
-                // .then(response => {
-                //     if (!response.ok) {
-                //         console.error(`Failed to send tank command`);
-                //     }
-                // })
-                // .catch(error => {
-                //     if (error.name !== 'AbortError') {
-                //         console.error('Error sending tank command:', error);
-                //     }
-                // })
                 .finally(() => {
                     pendingRequest = null;
                 });
