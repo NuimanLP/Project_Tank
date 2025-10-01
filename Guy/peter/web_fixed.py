@@ -90,30 +90,53 @@ def read_serial_data_thread():
             with serial_lock:
                 if ser.in_waiting > 0:
                     # Read until a newline character (Arduino's Serial.println())
-                    line = ser.readline().decode('utf-8').strip()
-                    print(line)
-                    # Arduino sends: Dist:XXX or Dist:ERROR
-                    if line.startswith("Dist:"):
+                    raw_data = ser.readline()
+                    
+                    # Try different decoding methods
+                    try:
+                        # First try UTF-8
+                        line = raw_data.decode('utf-8').strip()
+                    except UnicodeDecodeError:
                         try:
-                            # Extract the numeric part
-                            distance_value = line.split(':')[1]
-                            if distance_value == "ERROR":
-                                ultrasonic_distance = "N/A"
-                                print("Distance Error: Sensor timeout or out of range")
-                            else:
-                                ultrasonic_distance = distance_value 
-                                print(f"Distance Received: {ultrasonic_distance} cm") # Debugging
+                            # Try latin-1 which accepts all byte values
+                            line = raw_data.decode('latin-1').strip()
+                            print(f"Warning: Non-UTF8 data received, using latin-1 encoding")
                         except:
-                            ultrasonic_distance = "N/A"
-                            pass # Ignore malformed lines
+                            # If all else fails, ignore errors
+                            line = raw_data.decode('utf-8', errors='ignore').strip()
+                            print(f"Warning: Corrupted data received, some bytes ignored")
+                    
+                    # Only process non-empty lines
+                    if line:
+                        print(line)
+                        # Arduino sends: Dist:XXX or Dist:ERROR
+                        if line.startswith("Dist:"):
+                            try:
+                                # Extract the numeric part
+                                distance_value = line.split(':')[1]
+                                if distance_value == "ERROR":
+                                    ultrasonic_distance = "N/A"
+                                    print("Distance Error: Sensor timeout or out of range")
+                                else:
+                                    ultrasonic_distance = distance_value 
+                                    print(f"Distance Received: {ultrasonic_distance} cm") # Debugging
+                            except:
+                                ultrasonic_distance = "N/A"
+                                pass # Ignore malformed lines
                             
+        except serial.SerialException as e:
+            print(f"Serial connection error: {e}")
+            ultrasonic_distance = "N/A"
+            # Try to reconnect
+            time.sleep(1)
+            continue
         except Exception as e:
             print(f"Serial reading thread error: {e}")
             ultrasonic_distance = "N/A"
-            break
+            # Don't break on general errors, just continue
+            time.sleep(0.1)
+            continue
         time.sleep(0.01) # Short delay to prevent high CPU usage
-
-
 def parse_tank_command(path: str) -> Dict[str, int]:
     """
     Parses the command from a URL path, decodes it, and returns a dictionary 
