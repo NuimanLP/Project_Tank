@@ -1,0 +1,99 @@
+═══════════════════════════════════════════════════════════
+✅ MOBILE UI - WITH STATUS PANEL! ✅
+═══════════════════════════════════════════════════════════
+
+📱 NEW MOBILE LAYOUT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   ┌─────────────────────────────────────┐
+   │ Status & Telemetry          [Compact]│ ← TOP BAR
+   │ Time: 15:36:02         Latency: 3 ms │  (Fixed position)
+   │ Distance: 254 cm      Motors: 0/0    │
+   │ Command: None      [Light: OFF]      │
+   ├─────────────────────────────────────┤
+   │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
+   │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│ ← VIDEO
+   │░░░░░░  VIDEO STREAM  ░░░░░░░░░░░░░░│  (Large!)
+   │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
+   │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
+   ├─────────────────────────────────────┤
+   │  🎮                             🎮   │ ← BOTTOM
+   │(Move)   [Laser: OFF]         (Aim)  │  (Controls)
+   │                [FIRE]                │
+   └─────────────────────────────────────┘
+
+🎯 KEY FEATURES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Status Panel: COMPACT at TOP
+   - Full width bar
+   - Dark semi-transparent background
+   - Shows: Time, Latency, Distance, Motors, Command
+   - Light toggle button included
+   - Font size: 11px (readable but compact)
+
+✅ Video Stream: LARGE in MIDDLE
+   - Height: calc(100vh - 280px)
+   - Full width (100vw)
+   - object-fit: cover
+   - Takes up most of screen space
+
+✅ Controls: SMALL at BOTTOM
+   - Left joystick: 90px (movement)
+   - Right joystick: 90px (turret)
+   - Fire button: 90px × 26px
+   - Laser status: 9px font
+   - Semi-transparent backgrounds
+
+📊 SPACE DISTRIBUTION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Top Bar:     ~150px  (Status & Telemetry)
+Video:       ~60%    (Main focus)
+Controls:    ~100px  (Bottom joysticks)
+Total:       100vh   (Full screen)
+
+🔍 WHAT'S HIDDEN ON MOBILE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ Motor progress bars (saved space)
+❌ Keyboard instruction text
+❌ Horizontal rules (hr)
+❌ Extra padding/margins
+
+✨ WHAT'S VISIBLE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Time
+✓ Latency
+✓ Distance
+✓ Motor speeds (text only)
+✓ Current command
+✓ Light toggle button
+✓ Large video stream
+✓ Both joysticks
+✓ Fire button
+✓ Laser status
+
+📏 RESPONSIVE BREAKPOINTS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+< 768px:  Standard mobile layout
+< 400px:  Extra compact for small phones
+  - Video: calc(100vh - 260px)
+  - Joysticks: 80px
+  - Font sizes: 10px
+
+💡 TO TEST:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Open on mobile browser
+2. Hard refresh (clear cache)
+3. You should see:
+   - Status info at top
+   - Big video in middle
+   - Controls at bottom
+
+🎨 DESIGN NOTES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Status bar uses rgba(34,34,34,0.95) - dark semi-transparent
+- Video border: 2px cyan (#00bcd4)
+- Joysticks: Semi-transparent gray (rgba 0.6)
+- Clean, functional, mobile-optimized
+
+═══════════════════════════════════════════════════════════

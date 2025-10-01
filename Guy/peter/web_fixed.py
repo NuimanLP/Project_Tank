@@ -12,6 +12,7 @@ from datetime import datetime
 import pytz
 import urllib.parse
 from typing import Dict, Any
+import json
 
 try:
     import serial
@@ -55,6 +56,10 @@ THAILAND_TIMEZONE = pytz.timezone('Asia/Bangkok')
 ser = None
 serial_lock = threading.Lock()
 ultrasonic_distance = "N/A" # Variable to store the distance value (cm)
+
+# Motor speed variables (0-255 range)
+motor_m1_speed = 0
+motor_m2_speed = 0
 # ----------------------------------------------------
 
 
@@ -79,7 +84,7 @@ last_frame_latency = 0
 # Thread for Reading Ultrasonic Data from Arduino (Unchanged)
 def read_serial_data_thread():
     """Continuously reads data from the Arduino serial port for sensor values."""
-    global ser, ultrasonic_distance
+    global ser, ultrasonic_distance, motor_m1_speed, motor_m2_speed
     print("Starting Arduino serial data reader thread...")
     if ser is None:
         print("Serial reader skipped: Serial port not available.")
@@ -122,6 +127,23 @@ def read_serial_data_thread():
                                     print(f"Distance Received: {ultrasonic_distance} cm") # Debugging
                             except:
                                 ultrasonic_distance = "N/A"
+                                pass # Ignore malformed lines
+                        
+                        # Arduino sends: M1:XXX or M2:XXX (motor PWM values -255 to 255)
+                        elif line.startswith("M1:"):
+                            try:
+                                motor_value = line.split(':')[1]
+                                motor_m1_speed = int(motor_value)
+                                print(f"Motor M1 PWM Received: {motor_m1_speed}")
+                            except:
+                                pass # Ignore malformed lines
+                        
+                        elif line.startswith("M2:"):
+                            try:
+                                motor_value = line.split(':')[1]
+                                motor_m2_speed = int(motor_value)
+                                print(f"Motor M2 PWM Received: {motor_m2_speed}")
+                            except:
                                 pass # Ignore malformed lines
                             
         except serial.SerialException as e:
@@ -180,7 +202,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         pass
         
     def do_GET(self):
-        global current_blink_thread, blink_stop_event, ultrasonic_distance
+        global current_blink_thread, blink_stop_event, ultrasonic_distance, motor_m1_speed, motor_m2_speed
         
         # --- Existing code for static files, GPIO, and video stream ---
         if self.path == '/':
@@ -223,6 +245,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                     print("Serial port not initialized.")
                     return
 
+
                 command_str = f"FR:{command_data['FR']};LR:{command_data['LR']};UD:{command_data['UD']};TLR:{command_data['TLR']};FC:{command_data['FC']};LC:{command_data['LC']}" # "FR:5;LR:0"
                 message_to_send = command_str + '\n'
                 with serial_lock:
@@ -252,6 +275,17 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             # Send the global variable value updated by the serial reader thread
             self.wfile.write(str(ultrasonic_distance).encode('utf-8'))
+            
+        elif self.path == '/get_motor_speeds':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            import json
+            motor_data = {
+                'M1': motor_m1_speed,
+                'M2': motor_m2_speed
+            }
+            self.wfile.write(json.dumps(motor_data).encode('utf-8'))
             
         elif self.path == '/laser_on':
             try:
