@@ -216,14 +216,14 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 # print(self.path)
                 command_data = parse_tank_command(self.path)
-                # print(command_data)
+                print(command_data)
 
                 global ser
                 if ser is None:
                     print("Serial port not initialized.")
                     return
 
-                command_str = f"FR:{command_data['FR']};LR:{command_data['LR']};UD:{command_data['UD']};TLR:{command_data['TLR']};FC:{command_data['FC']}" # "FR:5;LR:0"
+                command_str = f"FR:{command_data['FR']};LR:{command_data['LR']};UD:{command_data['UD']};TLR:{command_data['TLR']};FC:{command_data['FC']};LC:{command_data['LC']}" # "FR:5;LR:0"
                 message_to_send = command_str + '\n'
                 with serial_lock:
                     ser.write(message_to_send.encode('utf-8'))

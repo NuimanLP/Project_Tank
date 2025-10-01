@@ -59,7 +59,7 @@
         @media (max-width: 600px) {
             .main-layout {
                 /* ทำให้ภาพกินพื้นที่เกือบเต็มจอแทนการคำนวณที่ซับซ้อน */
-                height: 85vh; 
+                height: 85vh;
                 padding: 5px;
             }
 
@@ -75,7 +75,7 @@
                 width: 60px;
                 height: 60px;
             }
-            
+
             /* ปรับตำแหน่งกล่องควบคุมหลักให้ชิดขอบมากขึ้น */
             #movement-control-box {
                 bottom: 5px;
@@ -98,9 +98,11 @@
 
             /* ปรับขนาดปุ่มไฟให้เล็กลงเมื่อ info-panel ถูกซ่อน */
             #lightToggleBtn-Right {
-                width: 150px; /* อาจจะไม่ใช้เพราะถูกซ่อน แต่เผื่อต้องการนำกลับมาใช้ */
+                width: 150px;
+                /* อาจจะไม่ใช้เพราะถูกซ่อน แต่เผื่อต้องการนำกลับมาใช้ */
             }
         }
+
         /* ******************************************************************* */
 
 
@@ -755,6 +757,19 @@
             if (key == 'd') {
                 leftJoystickX = -10;
             }
+            // Check for up and down arrow keys
+            if (key === 'arrowup') {
+                rightJoystickY = 10;
+            } else if (key === 'arrowdown') {
+                rightJoystickY = -10;
+            }
+
+            // Check for left and right arrow keys
+            if (key === 'arrowleft') {
+               rightJoystickX = 10;
+            } else if (key === 'arrowright') { // Added for the right arrow key
+               rightJoystickX = -10;
+            }
 
         }
 
@@ -779,6 +794,32 @@
             if (key == 'd') {
                 if (!pressedKeys.has('a')) leftJoystickX = 0;
             }
+
+                if (key === 'arrowup') {
+        if (!pressedKeys.has('arrowdown')) {
+            rightJoystickY = 0;
+        }
+    }
+
+
+    if (key === 'arrowdown') {
+        if (!pressedKeys.has('arrowup')) {
+            rightJoystickY = 0;
+        }
+    }
+
+    if (key === 'arrowleft') {
+        if (!pressedKeys.has('arrowright')) {
+            rightJoystickX = 0;
+        }
+    }
+
+
+    if (key === 'arrowright') {
+        if (!pressedKeys.has('arrowleft')) {
+            rightJoystickX = 0;
+        }
+    }
         }
 
         cleanupManager.addEventListener(document, 'keydown', handleKeyDown);
