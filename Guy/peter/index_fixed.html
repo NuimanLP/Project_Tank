@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <title>Tonk Project Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        /* ส่วน Style ทั่วไป */
+        html,
+        body {
+            background-color: #222;
+            color: #eee;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .main-layout {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* ค่าเริ่มต้นสำหรับจอใหญ่: หักความสูงของ Control Box ออก */
+            height: calc(100% - 320px);
+            width: 100vw;
+            box-sizing: border-box;
+            padding: 10px;
+            position: relative;
+            order: -1;
+        }
+
+        .stream-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        img {
+            border: 3px solid #00bcd4;
+            box-shadow: 0 0 25px rgba(0, 188, 212, 0.5);
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            cursor: crosshair;
+        }
+
+        /* ******************************************************************* */
+        /* *********************** MEDIA QUERY สำหรับมือถือ *********************** */
+        /* ** ส่วนที่แก้ไขเพื่อให้ภาพขยายใหญ่ขึ้นบนมือถือ (ความกว้างหน้าจอสูงสุด 600px) ** */
+        @media (max-width: 600px) {
+            .main-layout {
+                /* ทำให้ภาพกินพื้นที่เกือบเต็มจอแทนการคำนวณที่ซับซ้อน */
+                height: 85vh; 
+                padding: 5px;
+            }
+
+            /* ปรับขนาดจอยสติ๊กให้เล็กลงเล็กน้อยเพื่อประหยัดพื้นที่บนมือถือ */
+            #virtualJoystick,
+            #virtualJoystickAux {
+                width: 150px;
+                height: 150px;
+            }
+
+            #joystickThumb,
+            #joystickThumbAux {
+                width: 60px;
+                height: 60px;
+            }
+            
+            /* ปรับตำแหน่งกล่องควบคุมหลักให้ชิดขอบมากขึ้น */
+            #movement-control-box {
+                bottom: 5px;
+                left: 5px;
+                padding: 10px;
+            }
+
+            /* ปรับตำแหน่งกล่องควบคุมเสริมให้ชิดขอบมากขึ้น */
+            #auxiliary-control-box {
+                bottom: 5px;
+                right: 5px;
+                padding: 10px;
+                height: auto;
+            }
+
+            /* ซ่อนแผงข้อมูลสถานะเพื่อให้ภาพมีพื้นที่มากขึ้น */
+            .info-panel {
+                display: none;
+            }
+
+            /* ปรับขนาดปุ่มไฟให้เล็กลงเมื่อ info-panel ถูกซ่อน */
+            #lightToggleBtn-Right {
+                width: 150px; /* อาจจะไม่ใช้เพราะถูกซ่อน แต่เผื่อต้องการนำกลับมาใช้ */
+            }
+        }
+        /* ******************************************************************* */
+
+
+        .info-panel {
+            position: fixed;
+            top: 20px;
+            right: 10px;
+            background-color: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 15px;
+            box-shadow: none;
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 100;
+        }
+
+        #lightToggleBtn-Right {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s, box-shadow 0.2s, transform 0.1s;
+            box-shadow: 0 3px #1565C0;
+        }
+
+        .info h2 {
+            color: #00bcd4;
+            margin-top: 0;
+            border-bottom: 1px solid rgba(85, 85, 85, 0.5);
+            padding-bottom: 5px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .info p {
+            margin: 10px 0;
+            font-size: 0.95em;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .info .status {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .info span {
+            color: #fff;
+            font-weight: normal;
+        }
+
+        .info hr {
+            border-color: rgba(85, 85, 85, 0.5);
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        #movement-control-box {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 15px;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 100;
+        }
+
+        #virtualJoystick {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: rgba(85, 85, 85, 0.7);
+            border: 2px solid #FFC107;
+            position: relative;
+            cursor: grab;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #joystickThumb {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: #FFC107;
+            position: absolute;
+            box-shadow: 0 0 15px rgba(255, 193, 7, 0.8);
+            transition: background 0.1s;
+        }
+
+        .gpio-status {
+            color: #ccc;
+            margin-top: 10px;
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        .gpio-status.on {
+            color: #4CAF50;
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+
+        .gpio-status.off {
+            color: #f44336;
+            background-color: rgba(244, 67, 54, 0.1);
+        }
+
+        .light-off {
+            background-color: #03A9F4;
+            color: #fff;
+        }
+
+        .light-off:active {
+            background-color: #0288D1;
+            transform: translateY(2px);
+            box-shadow: 0 1px #1565C0;
+        }
+
+        .light-on {
+            background-color: #FFEB3B;
+            color: #333;
+            box-shadow: 0 3px #FFC107;
+        }
+
+        .light-on:active {
+            background-color: #FFC107;
+            transform: translateY(2px);
+            box-shadow: 0 1px #FFC107;
+        }
+
+        #auxiliary-control-box {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 15px;
+            box-shadow: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 100;
+            height: 300px;
+        }
+
+        .aux-control {
+            width: 100%;
+            text-align: center;
+        }
+
+        #virtualJoystickAux {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: rgba(50, 50, 50, 0.7);
+            border: 2px solid #64B5F6;
+            position: relative;
+            cursor: grab;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        #joystickThumbAux {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: #64B5F6;
+            position: absolute;
+            box-shadow: 0 0 15px rgba(100, 181, 246, 0.8);
+            transition: background 0.1s;
+        }
+
+        #fireButton {
+            background-color: #f44336;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 200px;
+            height: 40px;
+            margin-top: 15px;
+            box-shadow: 0 3px #c63700;
+            transition: background-color 0.1s, transform 0.1s;
+        }
+
+        #fireButton:active {
+            background-color: #d32f2f;
+            transform: translateY(2px);
+            box-shadow: 0 1px #c63700;
+        }
+
+        .slider-container,
+        .slider-info,
+        .vertical-slider {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-layout">
+        <div class="stream-container">
+            <img id="videoStream" src="stream.mjpg" />
+        </div>
+    </div>
+
+    <div class="info-panel">
+        <h2>Status & Telemetry</h2>
+        <div class="info" style="width: 100%;">
+            <p>Time: <span id="piTime">Loading...</span></p>
+            <p>Latency: <span id="cameraLatency">N/A</span> ms</p>
+            <p>Distance: <span id="ultrasonicDistance">N/A</span> cm</p>
+
+            <hr>
+            <p>Command: <span id="keyPressStatus" class="status">None</span></p>
+
+        </div>
+        <button id="lightToggleBtn-Right" class="light-off">Light: OFF</button>
+    </div>
+
+    <div id="movement-control-box">
+
+        <div id="virtualJoystick">
+            <div id="joystickThumb"></div>
+        </div>
+
+        <p style="margin-top: 15px; font-size: 0.9em; color: #aaa;">Keyboard: **WASD** for Movement</p>
+        <div id="gpioStatus" class="gpio-status off">Laser Status: OFF</div>
+    </div>
+
+    <div id="auxiliary-control-box">
+        <div class="aux-control">
+
+            <div id="virtualJoystickAux">
+                <div id="joystickThumbAux"></div>
+            </div>
+            <p style="margin-top: 15px; font-size: 0.9em; color: #aaa;">Aux: **Pan/Tilt** (Turret Rotation)</p>
+            <p style="margin-top: 5px; font-size: 0.9em; color: #aaa;">Keyboard: **J/K** for Pan</p>
+
+            <div id="fireButton">FIRE</div>
+        </div>
+    </div>
+
+    <audio id="fireSound" src="gunshot.mp3" preload="auto"></audio>
+
+    <script>
+        const cleanupManager = {
+            intervals: new Set(),
+            timeouts: new Set(),
+            abortControllers: new Set(),
+            eventListeners: [],
+
+            addInterval(id) {
+                this.intervals.add(id);
+            },
+
+            addTimeout(id) {
+                this.timeouts.add(id);
+            },
+
+            addAbortController(controller) {
+                this.abortControllers.add(controller);
+            },
+
+            addEventListener(target, event, handler, options) {
+                this.eventListeners.push({
+                    target,
+                    event,
+                    handler,
+                    options
+                });
+                target.addEventListener(event, handler, options);
+            },
+
+            cleanup() {
+                this.intervals.forEach(id => clearInterval(id));
+                this.intervals.clear();
+
+                this.timeouts.forEach(id => clearTimeout(id));
+                this.timeouts.clear();
+
+                this.abortControllers.forEach(controller => {
+                    try {
+                        controller.abort();
+                    } catch (e) {
+                        console.error('Error aborting controller:', e);
+                    }
+                });
+                this.abortControllers.clear();
+
+                this.eventListeners.forEach(({
+                    target,
+                    event,
+                    handler,
+                    options
+                }) => {
+                    try {
+                        target.removeEventListener(event, handler, options);
+                    } catch (e) {
+                        console.error('Error removing event listener:', e);
+                    }
+                });
+                this.eventListeners = [];
+            }
+        };
+
+        window.addEventListener('beforeunload', () => {
+            cleanupManager.cleanup();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (mainIntervalId) {
+                    clearInterval(mainIntervalId);
+                    mainIntervalId = null;
+                }
+            } else {
+                if (!mainIntervalId && typeof repeatedTask === 'function') {
+                    mainIntervalId = setInterval(repeatedTask, 50);
+                    cleanupManager.addInterval(mainIntervalId);
+                }
+            }
+        });
+
+        const gpioStatus = document.getElementById('gpioStatus');
+        const piTimeElement = document.getElementById('piTime');
+        const videoStream = document.getElementById('videoStream');
+        const cameraLatencyElement = document.getElementById('cameraLatency');
+        const keyPressStatus = document.getElementById('keyPressStatus');
+        const ultrasonicDistanceElement = document.getElementById('ultrasonicDistance');
+        const fireSound = document.getElementById('fireSound');
+
+        const lightToggleBtn = document.getElementById('lightToggleBtn-Right');
+        let isLightOn = false;
+
+
+        const joystick = document.getElementById('virtualJoystick');
+        const thumb = document.getElementById('joystickThumb');
+
+        // ต้องคำนวณขนาดใหม่เมื่อ Media Query ถูกใช้
+        let joystickRadius = joystick.offsetWidth / 2;
+        let thumbRadius = thumb.offsetWidth / 2;
+        let maxDistance = joystickRadius - thumbRadius;
+
+        let isDragging = false;
+        let lastCommand = 'X';
+
+        const joystickAux = document.getElementById('virtualJoystickAux');
+        const thumbAux = document.getElementById('joystickThumbAux');
+
+        // ต้องคำนวณขนาดใหม่เมื่อ Media Query ถูกใช้
+        let joystickAuxRadius = joystickAux.offsetWidth / 2;
+        let thumbAuxRadius = thumbAux.offsetWidth / 2;
+        let maxDistanceAux = joystickAuxRadius - thumbAuxRadius;
+
+        let isDraggingAux = false;
+        let lastAuxCommandX = 0;
+        let lastAuxCommandY = 0;
+        let auxPanCommandInterval = null;
+        const AUX_PAN_THRESHOLD = 50;
+
+        const fireButton = document.getElementById('fireButton');
+        const pressedKeys = new Set();
+        const movementKeys = new Set(['w', 'a', 's', 'd']);
+        const turretKeys = new Set(['j', 'k']);
+        let isFireOn = false;
+        let isAudioPlaying = false;
+
+        let turretPanInterval = null;
+        const TURRET_PAN_INTERVAL_MS = 50;
+
+        // Threshold ต้องอัพเดทตามขนาดจอยสติ๊กใหม่
+        let threshold = maxDistance * 0.2;
+
+        let leftJoystickX = 0;
+        let leftJoystickY = 0;
+
+        let rightJoystickX = 0;
+        let rightJoystickY = 0;
+
+        let firing = 0;
+
+        // ฟังค์ชันเพื่อปรับขนาดจอยสติ๊กเมื่อมีการเปลี่ยนขนาดหน้าจอ
+        function updateJoystickDimensions() {
+            joystickRadius = joystick.offsetWidth / 2;
+            thumbRadius = thumb.offsetWidth / 2;
+            maxDistance = joystickRadius - thumbRadius;
+            threshold = maxDistance * 0.2;
+
+            joystickAuxRadius = joystickAux.offsetWidth / 2;
+            thumbAuxRadius = thumbAux.offsetWidth / 2;
+            maxDistanceAux = joystickAuxRadius - thumbAuxRadius;
+        }
+
+        // เพิ่ม Event Listener สำหรับการเปลี่ยนขนาดหน้าจอ (สำคัญสำหรับ Mobile)
+        cleanupManager.addEventListener(window, 'resize', updateJoystickDimensions);
+        // เรียกใช้ครั้งแรกเมื่อโหลดหน้า
+        document.addEventListener('DOMContentLoaded', updateJoystickDimensions);
+
+
+        function safeFetch(url, options = {}) {
+            const controller = new AbortController();
+            cleanupManager.addAbortController(controller);
+
+            return fetch(url, {
+                ...options,
+                signal: controller.signal
+            }).finally(() => {
+                cleanupManager.abortControllers.delete(controller);
+            });
+        }
+
+        function handleJoystickStart(e) {
+            e.preventDefault();
+            isDragging = true;
+            thumb.style.transition = 'none';
+        }
+
+        function getJoystickPosition(e, joystickElement, joystickRadius) {
+            const rect = joystickElement.getBoundingClientRect();
+            const centerX = rect.left + joystickRadius;
+            const centerY = rect.top + joystickRadius;
+
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+
+            const dx = clientX - centerX;
+            const dy = clientY - centerY;
+
+            return {
+                dx,
+                dy,
+                distance: Math.sqrt(dx * dx + dy * dy)
+            };
+        }
+
+        function handleJoystickMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+
+            let {
+                dx,
+                dy,
+                distance
+            } = getJoystickPosition(e, joystick, joystickRadius);
+
+            if (distance > maxDistance) {
+                const angle = Math.atan2(dy, dx);
+                dx = maxDistance * Math.cos(angle);
+                dy = maxDistance * Math.sin(angle);
+            }
+
+            thumb.style.transform = `translate(${dx}px, ${dy}px)`;
+
+            if (distance > threshold) {
+                leftJoystickY = Math.round(dy * 10 / maxDistance * -1);
+                leftJoystickX = Math.round(dx * 10 / maxDistance * -1);
+            } else {
+                leftJoystickY = 0;
+                leftJoystickX = 0;
+            }
+
+        }
+
+        function handleJoystickEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+
+            thumb.style.transition = 'transform 0.2s ease-out';
+            thumb.style.transform = 'translate(0px, 0px)';
+            leftJoystickY = 0;
+            leftJoystickX = 0;
+
+        }
+
+        cleanupManager.addEventListener(joystick, 'mousedown', handleJoystickStart);
+        cleanupManager.addEventListener(document, 'mousemove', handleJoystickMove);
+        cleanupManager.addEventListener(document, 'mouseup', handleJoystickEnd);
+
+        cleanupManager.addEventListener(joystick, 'touchstart', handleJoystickStart);
+        cleanupManager.addEventListener(document, 'touchmove', handleJoystickMove);
+        cleanupManager.addEventListener(document, 'touchend', handleJoystickEnd);
+        cleanupManager.addEventListener(document, 'touchcancel', handleJoystickEnd);
+
+        function handleJoystickAuxStart(e) {
+            e.preventDefault();
+            isDraggingAux = true;
+            thumbAux.style.transition = 'none';
+        }
+
+        function handleJoystickAuxMove(e) {
+            if (!isDraggingAux) return;
+            e.preventDefault();
+
+            let {
+                dx,
+                dy,
+                distance
+            } = getJoystickPosition(e, joystickAux, joystickAuxRadius);
+
+            if (distance > maxDistanceAux) {
+                const angle = Math.atan2(dy, dx);
+                dx = maxDistanceAux * Math.cos(angle);
+                dy = maxDistanceAux * Math.sin(angle);
+            }
+
+            thumbAux.style.transform = `translate(${dx}px, ${dy}px)`;
+
+            if (distance > threshold) {
+                rightJoystickY = Math.round(dy * 10 / maxDistance * -1);
+                rightJoystickX = Math.round(dx * 10 / maxDistance * -1);
+                console.log(rightJoystickY);
+            } else {
+                rightJoystickY = 0;
+                rightJoystickX = 0;
+            }
+
+
+        }
+
+        function handleJoystickAuxEnd() {
+            if (!isDraggingAux) return;
+            isDraggingAux = false;
+
+            thumbAux.style.transition = 'transform 0.2s ease-out';
+            thumbAux.style.transform = 'translate(0px, 0px)';
+
+            rightJoystickY = 0;
+            rightJoystickX = 0;
+        }
+
+        cleanupManager.addEventListener(joystickAux, 'mousedown', handleJoystickAuxStart);
+        cleanupManager.addEventListener(document, 'mousemove', handleJoystickAuxMove);
+        cleanupManager.addEventListener(document, 'mouseup', handleJoystickAuxEnd);
+
+        cleanupManager.addEventListener(joystickAux, 'touchstart', handleJoystickAuxStart);
+        cleanupManager.addEventListener(document, 'touchmove', handleJoystickAuxMove);
+        cleanupManager.addEventListener(document, 'touchend', handleJoystickAuxEnd);
+        cleanupManager.addEventListener(document, 'touchcancel', handleJoystickAuxEnd);
+
+        function toggleCarLight() {
+            isLightOn = !isLightOn;
+            updateLightButtonUI();
+        }
+
+        function updateLightButtonUI() {
+            if (isLightOn) {
+                lightToggleBtn.textContent = 'Light: ON';
+                lightToggleBtn.classList.remove('light-off');
+                lightToggleBtn.classList.add('light-on');
+            } else {
+                lightToggleBtn.textContent = 'Light: OFF';
+                lightToggleBtn.classList.remove('light-on');
+                lightToggleBtn.classList.add('light-off');
+            }
+        }
+
+        cleanupManager.addEventListener(lightToggleBtn, 'click', toggleCarLight);
+        const LIGHT_KEY = 'l';
+
+
+        function handleFireOn() {
+            if (!isFireOn) {
+                isFireOn = true;
+                firing = 1;
+            }
+        }
+
+        function handleFireOff() {
+            if (isFireOn) {
+                isFireOn = false;
+                firing = 0;
+            }
+        }
+
+        function updateStatus(state) {
+            if (state === 'on') {
+                gpioStatus.textContent = "Laser Status: ON (FIRE)";
+                gpioStatus.classList.remove('off');
+                gpioStatus.classList.add('on');
+            } else {
+                gpioStatus.textContent = "Laser Status: OFF";
+                gpioStatus.classList.remove('on');
+                gpioStatus.classList.add('off');
+            }
+        }
+
+        cleanupManager.addEventListener(fireButton, 'mousedown', handleFireOn);
+        cleanupManager.addEventListener(fireButton, 'mouseup', handleFireOff);
+        cleanupManager.addEventListener(fireButton, 'touchstart', (e) => {
+            e.preventDefault();
+            handleFireOn();
+        });
+        cleanupManager.addEventListener(fireButton, 'touchend', (e) => {
+            e.preventDefault();
+            handleFireOff();
+        });
+        cleanupManager.addEventListener(fireButton, 'touchcancel', (e) => {
+            e.preventDefault();
+            handleFireOff();
+        });
+
+        function handleKeyDown(e) {
+            const key = e.key.toLowerCase();
+
+            if (pressedKeys.has(key)) return;
+            pressedKeys.add(key);
+
+            if (key === ' ') {
+                if (!isFireOn) {
+                    e.preventDefault();
+                    handleFireOn();
+                }
+            }
+            if (key === LIGHT_KEY) {
+                toggleCarLight();
+            }
+
+            if (key == 'w') {
+                leftJoystickY = 10;
+            }
+            if (key == 's') {
+                leftJoystickY = -10;
+            }
+            if (key == 'a') {
+                leftJoystickX = 10;
+            }
+            if (key == 'd') {
+                leftJoystickX = -10;
+            }
+
+        }
+
+        function handleKeyUp(e) {
+            const key = e.key.toLowerCase();
+
+            pressedKeys.delete(key);
+
+            if (key === ' ') {
+                handleFireOff();
+            }
+
+            if (key == 'w') {
+                if (!pressedKeys.has('s')) leftJoystickY = 0;
+            }
+            if (key == 's') {
+                if (!pressedKeys.has('w')) leftJoystickY = 0;
+            }
+            if (key == 'a') {
+                if (!pressedKeys.has('d')) leftJoystickX = 0;
+            }
+            if (key == 'd') {
+                if (!pressedKeys.has('a')) leftJoystickX = 0;
+            }
+        }
+
+        cleanupManager.addEventListener(document, 'keydown', handleKeyDown);
+        cleanupManager.addEventListener(document, 'keyup', handleKeyUp);
+
+        function updatePiTime() {
+            safeFetch('/get_time')
+                .then(response => response.text())
+                .then(time => {
+                    piTimeElement.textContent = time;
+                })
+                .catch(error => {
+                    if (error.name !== 'AbortError') {
+                        piTimeElement.textContent = 'N/A';
+                    }
+                });
+        }
+        updatePiTime();
+
+        function updateCameraLatency() {
+            safeFetch('/get_latency')
+                .then(response => response.text())
+                .then(latency => {
+                    cameraLatencyElement.textContent = latency;
+                })
+                .catch(error => {
+                    if (error.name !== 'AbortError') {
+                        cameraLatencyElement.textContent = 'N/A';
+                    }
+                });
+        }
+        updateCameraLatency();
+
+        let readIntervalId = null;
+        let readPendingRequest = null;
+
+        function readDataTask() {
+            if (readPendingRequest) return;
+
+            readPendingRequest = safeFetch('/get_distance')
+                .then(response => response.text())
+                .then(distance => {
+                    ultrasonicDistanceElement.textContent = distance;
+                })
+                .catch(error => {
+                    if (error.name !== 'AbortError') {
+                        ultrasonicDistanceElement.textContent = 'N/A';
+                    }
+                })
+                .finally(() => {
+                    readPendingRequest = null;
+                });
+        }
+
+        readIntervalId = setInterval(readDataTask, 50);
+        cleanupManager.addInterval(readIntervalId);
+
+        let mainIntervalId = null;
+        let pendingRequest = null;
+
+        function repeatedTask() {
+            if (pendingRequest) return;
+
+            console.log("This message repeats every 50 ms.");
+            console.log("FR", leftJoystickY);
+            console.log("LR", leftJoystickX);
+
+            console.log("UD", rightJoystickY);
+            console.log("TLR", rightJoystickX);
+
+
+            let fireData = isFireOn ? 1 : 0;
+            let lightData = isLightOn ? 1 : 0;
+
+            console.log("FIRE", isFireOn);
+            console.log("LIGHT", isLightOn);
+
+            const rawCommand = `FR:${leftJoystickY};LR:${leftJoystickX};UD:${rightJoystickY};TLR:${rightJoystickX};FC:${fireData};LC:${lightData}`;
+            const encodedCommand = encodeURIComponent(rawCommand);
+
+            pendingRequest = safeFetch(`/tank_command?cmd=${encodedCommand}`)
+                .finally(() => {
+                    pendingRequest = null;
+                });
+        }
+
+        mainIntervalId = setInterval(repeatedTask, 50);
+        cleanupManager.addInterval(mainIntervalId);
+    </script>
+</body>
+
+</html>
