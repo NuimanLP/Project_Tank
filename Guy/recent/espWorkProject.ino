@@ -6,6 +6,7 @@ int leftRight = 0;        // LR (Tank Steering)
 int upDown = 0;           // UD (e.g., Camera or Arm Up/Down)
 int turretLeftRight = 0;  // TLR (e.g., Turret Rotation)
 int fireCannon = 0;
+int lightControl = 0;
 
 const int in1Pin = 27;  // H-Bridge input pins
 const int in2Pin = 26;
@@ -64,9 +65,19 @@ void setup() {
   pinMode(frontLED, OUTPUT);
   pinMode(rearLED, OUTPUT);
 
-  digitalWrite(frontLED, HIGH);
-  digitalWrite(rearLED, HIGH);
+
 }
+
+void checkLight() {
+  if (lightControl == 1) {
+  digitalWrite(frontLED, HIGH);
+  digitalWrite(rearLED, HIGH); 
+  } else {
+    digitalWrite(frontLED, LOW);
+    digitalWrite(rearLED, LOW); 
+  }
+}
+
 
 long microsecondsToCentimeters(long microseconds) {
   // The speed of sound is 340 m/s or 29 microseconds per centimeter.
@@ -85,47 +96,6 @@ long readDistance() {
   long duration = pulseIn(echoPin, HIGH);
   long distance_cm = microsecondsToCentimeters(duration);
   return distance_cm;
-}
-
-void fw() {
-  // first motor
-  digitalWrite(in1Pin, LOW);
-  digitalWrite(in2Pin, HIGH);
-  //second motor
-  digitalWrite(in3Pin, LOW);
-  digitalWrite(in4Pin, HIGH);
-}
-
-void re() {
-  // first motor
-  digitalWrite(in1Pin, HIGH);
-  digitalWrite(in2Pin, LOW);
-  //second motor
-  digitalWrite(in3Pin, HIGH);
-  digitalWrite(in4Pin, LOW);
-}
-
-void stop() {
-  digitalWrite(in1Pin, LOW);
-  digitalWrite(in2Pin, LOW);
-  digitalWrite(in3Pin, LOW);
-  digitalWrite(in4Pin, LOW);
-}
-void turnL() {
-  // first motor
-  digitalWrite(in1Pin, LOW);
-  digitalWrite(in2Pin, HIGH);
-  //second motor
-  digitalWrite(in3Pin, LOW);
-  digitalWrite(in4Pin, LOW);
-}
-void turnR() {
-  // first motor
-  digitalWrite(in1Pin, LOW);
-  digitalWrite(in2Pin, LOW);
-  //second motor
-  digitalWrite(in3Pin, LOW);
-  digitalWrite(in4Pin, HIGH);
 }
 
 unsigned long lastFired = millis();
@@ -245,26 +215,12 @@ void loop() {
       // Serial.print("FR: "); Serial.println(forwardReverse);
       // Serial.print("LR: "); Serial.println(leftRight);
       // Serial.print("UD: "); Serial.println(upDown);
-      // Serial.print("TLR: "); Serial.println(turretLeftRig ht);
+      // Serial.print("TLR: "); Serial.println(turretLeftRight);
       // Serial.print("FC: "); Serial.println(fireCannon);
+      // Serial.print("LC: "); Serial.println(lightControl);
       // Serial.println("---");
     }
 
-    // if (forwardReverse > 3) {
-    //   fw();
-
-    // } else if (forwardReverse < -3) {
-    //   re();
-
-    // } else if (leftRight < -3) {
-    //   turnR();
-
-    // } else if (leftRight > 3) {
-    //   turnL();
-
-    // } else if (forwardReverse == 0 && leftRight == 0) {
-    //   stop();
-    // }
     updateMotors(forwardReverse, leftRight);
 
     if (upDown > 3) {
@@ -285,6 +241,7 @@ void loop() {
     }
 
     servo1.write(servoDeg);
+    checkLight();
   }
   checkAndFireCannon();
 
@@ -331,7 +288,12 @@ void parseCommand(String dataString) {
       } else if (key.equalsIgnoreCase("FC")) {
         // NEW: Assign the Fire Cannon value
         fireCannon = value;
-      } else {
+      } else if (key.equalsIgnoreCase("LC")) {
+        // NEW: Assign the Fire Cannon value
+        lightControl = value;
+      } 
+      
+      else {
         Serial.print("Warning: Unknown command key received: ");
         Serial.println(key);
       }
